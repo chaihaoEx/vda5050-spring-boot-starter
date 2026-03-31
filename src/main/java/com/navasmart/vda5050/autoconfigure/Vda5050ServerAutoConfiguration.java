@@ -16,10 +16,29 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * VDA5050 Server 模式的自动配置类，当 {@code vda5050.server.enabled=true} 时激活。
+ *
+ * <p><b>前置条件（用户必须提供的 Bean）：</b>
+ * <ul>
+ *   <li>{@link Vda5050ServerAdapter} - Server 回调适配器（必须，用于接收状态变更通知）</li>
+ * </ul>
+ * </p>
+ *
+ * <p>缺少 {@link Vda5050ServerAdapter} Bean 时，AgvStateTracker 和 ServerConnectionMonitor
+ * 不会被创建（通过 {@link ConditionalOnBean} 控制），但 OrderDispatcher、InstantActionSender
+ * 和 OrderProgressTracker 仍会创建。</p>
+ *
+ * @see Vda5050AutoConfiguration
+ * @see Vda5050ServerAdapter
+ */
 @Configuration
 @ConditionalOnProperty(prefix = "vda5050.server", name = "enabled", havingValue = "true")
 public class Vda5050ServerAutoConfiguration {
 
+    /**
+     * 创建订单下发器，用于向 AGV 发送 Order 消息。
+     */
     @Bean
     @ConditionalOnMissingBean
     public OrderDispatcher orderDispatcher(VehicleRegistry vehicleRegistry, MqttGateway mqttGateway,
@@ -27,6 +46,9 @@ public class Vda5050ServerAutoConfiguration {
         return new OrderDispatcher(vehicleRegistry, mqttGateway, properties);
     }
 
+    /**
+     * 创建即时动作发送器，用于向 AGV 发送 InstantActions 消息。
+     */
     @Bean
     @ConditionalOnMissingBean
     public InstantActionSender instantActionSender(VehicleRegistry vehicleRegistry,
@@ -35,6 +57,11 @@ public class Vda5050ServerAutoConfiguration {
         return new InstantActionSender(vehicleRegistry, mqttGateway, properties);
     }
 
+    /**
+     * 创建 AGV 状态追踪器，解析 State 消息并检测变更。
+     *
+     * <p>前置条件：需要用户提供 {@link Vda5050ServerAdapter} Bean。</p>
+     */
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(Vda5050ServerAdapter.class)
@@ -43,12 +70,20 @@ public class Vda5050ServerAutoConfiguration {
         return new AgvStateTracker(vehicleRegistry, serverAdapter);
     }
 
+    /**
+     * 创建订单进度追踪器，用于查询指定车辆的订单执行进度。
+     */
     @Bean
     @ConditionalOnMissingBean
     public OrderProgressTracker orderProgressTracker(VehicleRegistry vehicleRegistry) {
         return new OrderProgressTracker(vehicleRegistry);
     }
 
+    /**
+     * 创建连接状态监控器，定期检测 AGV 超时并处理 Connection 消息。
+     *
+     * <p>前置条件：需要用户提供 {@link Vda5050ServerAdapter} Bean。</p>
+     */
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(Vda5050ServerAdapter.class)
@@ -58,6 +93,9 @@ public class Vda5050ServerAutoConfiguration {
         return new ServerConnectionMonitor(vehicleRegistry, properties, serverAdapter);
     }
 
+    /**
+     * 创建 MQTT 消息处理器绑定，将入站的 State、Connection、Factsheet 消息路由到对应的处理器。
+     */
     @Bean
     @ConditionalOnBean({AgvStateTracker.class, ServerConnectionMonitor.class})
     public ServerMqttHandlerWiring serverMqttHandlerWiring(MqttInboundRouter router,

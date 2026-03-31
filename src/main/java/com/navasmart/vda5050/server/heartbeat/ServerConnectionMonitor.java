@@ -11,6 +11,23 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * Server 模式下的连接状态监控器，负责检测 AGV 超时和处理 Connection 消息。
+ *
+ * <p>两项核心职责：
+ * <ul>
+ *   <li><b>超时检测</b>：按固定间隔（默认 30s，通过 {@code vda5050.server.connectionCheckMs} 配置）
+ *       检查每辆车距上次收到 State 消息的时间，超过阈值（{@code vda5050.server.stateTimeoutMs}）
+ *       时触发 {@link Vda5050ServerAdapter#onVehicleTimeout} 回调</li>
+ *   <li><b>Connection 消息处理</b>：接收 AGV 发布的 Connection 消息，
+ *       检测连接状态变化并触发 {@link Vda5050ServerAdapter#onConnectionStateChanged} 回调</li>
+ * </ul>
+ * </p>
+ *
+ * <p>线程安全：超时检测在调度线程中执行，Connection 处理通过 VehicleContext 锁保护。</p>
+ *
+ * @see Vda5050ServerAdapter
+ */
 @Component
 public class ServerConnectionMonitor {
 
@@ -27,6 +44,12 @@ public class ServerConnectionMonitor {
         this.serverAdapter = serverAdapter;
     }
 
+    /**
+     * 定期检查所有 Server 模式车辆的连接状态，检测超时车辆。
+     *
+     * <p>检查间隔默认 30s，可通过 {@code vda5050.server.connectionCheckMs} 配置。
+     * 超时阈值由 {@code vda5050.server.stateTimeoutMs} 配置。</p>
+     */
     @Scheduled(fixedDelayString = "${vda5050.server.connectionCheckMs:30000}")
     public void checkConnections() {
         long now = System.currentTimeMillis();
@@ -40,6 +63,15 @@ public class ServerConnectionMonitor {
         }
     }
 
+    /**
+     * 处理收到的 AGV Connection 消息，检测连接状态变化。
+     *
+     * <p>当连接状态（ONLINE/OFFLINE/CONNECTIONBROKEN）与之前记录的不同时，
+     * 触发 {@link Vda5050ServerAdapter#onConnectionStateChanged} 回调。</p>
+     *
+     * @param vehicleId  车辆标识符
+     * @param connection 收到的 Connection 消息
+     */
     public void processConnection(String vehicleId, Connection connection) {
         VehicleContext ctx = vehicleRegistry.get(vehicleId);
         if (ctx == null) return;

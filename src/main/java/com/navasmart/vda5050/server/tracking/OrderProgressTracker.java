@@ -7,6 +7,16 @@ import com.navasmart.vda5050.vehicle.VehicleContext;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.springframework.stereotype.Component;
 
+/**
+ * Server 模式下的订单进度追踪器，根据 AGV 上报的 State 消息计算订单执行进度。
+ *
+ * <p>通过对比已发送的订单（节点/动作总数）和 AGV 上报的状态（剩余节点/已完成动作数），
+ * 计算订单的完成百分比和当前位置信息。</p>
+ *
+ * <p>线程安全：通过 VehicleContext 的锁机制保证线程安全。</p>
+ *
+ * @see OrderProgress
+ */
 @Component
 public class OrderProgressTracker {
 
@@ -16,6 +26,14 @@ public class OrderProgressTracker {
         this.vehicleRegistry = vehicleRegistry;
     }
 
+    /**
+     * 获取指定车辆当前订单的执行进度。
+     *
+     * <p>如果车辆没有活动订单或未收到状态消息，返回 {@link OrderProgress#idle(String)}。</p>
+     *
+     * @param vehicleId 车辆标识符
+     * @return 当前订单进度信息
+     */
     public OrderProgress getProgress(String vehicleId) {
         VehicleContext ctx = vehicleRegistry.get(vehicleId);
         if (ctx == null) return OrderProgress.idle(vehicleId);

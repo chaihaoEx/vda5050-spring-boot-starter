@@ -11,6 +11,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+/**
+ * Server 模式下的订单下发器，负责向 AGV 发送 VDA5050 Order 消息。
+ *
+ * <p>自动填充消息头字段（headerId、timestamp、version、manufacturer、serialNumber），
+ * 用户只需构建订单内容（nodes、edges 等）。可配合 {@link OrderBuilder} 使用。</p>
+ *
+ * <p>线程安全：通过 VehicleContext 的锁机制保证线程安全。</p>
+ *
+ * @see OrderBuilder
+ * @see SendResult
+ */
 @Component
 public class OrderDispatcher {
 
@@ -27,6 +38,16 @@ public class OrderDispatcher {
         this.properties = properties;
     }
 
+    /**
+     * 向指定车辆发送新订单。
+     *
+     * <p>自动填充消息头字段并通过 MQTT 发布。发送成功后将订单记录为 lastSentOrder，
+     * 用于后续的订单进度追踪和完成检测。</p>
+     *
+     * @param vehicleId 目标车辆标识符
+     * @param order     待发送的订单（headerId 等字段会被自动覆盖）
+     * @return 发送结果；车辆未注册时返回失败
+     */
     public SendResult sendOrder(String vehicleId, Order order) {
         VehicleContext ctx = vehicleRegistry.get(vehicleId);
         if (ctx == null) {
@@ -51,6 +72,16 @@ public class OrderDispatcher {
         return SendResult.success();
     }
 
+    /**
+     * 向指定车辆发送订单更新（追加 horizon）。
+     *
+     * <p>校验 orderId 是否与上次发送的订单一致，不一致时返回失败。
+     * 校验通过后委托 {@link #sendOrder} 执行实际发送。</p>
+     *
+     * @param vehicleId   目标车辆标识符
+     * @param orderUpdate 订单更新消息（orderId 必须与上次发送的订单匹配）
+     * @return 发送结果；车辆未注册或 orderId 不匹配时返回失败
+     */
     public SendResult sendOrderUpdate(String vehicleId, Order orderUpdate) {
         VehicleContext ctx = vehicleRegistry.get(vehicleId);
         if (ctx == null) {
