@@ -1,7 +1,11 @@
 package com.navasmart.vda5050.proxy.statemachine;
 
 import com.navasmart.vda5050.error.ErrorAggregator;
-import com.navasmart.vda5050.model.*;
+import com.navasmart.vda5050.model.Action;
+import com.navasmart.vda5050.model.ActionState;
+import com.navasmart.vda5050.model.Edge;
+import com.navasmart.vda5050.model.Node;
+import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.model.enums.ActionStatus;
 import com.navasmart.vda5050.model.enums.BlockingType;
 import com.navasmart.vda5050.proxy.action.ActionHandler;
@@ -90,10 +94,14 @@ public class ProxyOrderExecutor {
         ctx.lock();
         try {
             // 只处理 RUNNING 状态的车辆，IDLE 和 PAUSED 跳过
-            if (ctx.getClientState() != ProxyClientState.RUNNING) return;
+            if (ctx.getClientState() != ProxyClientState.RUNNING) {
+                return;
+            }
 
             Order order = ctx.getCurrentOrder();
-            if (order == null) return;
+            if (order == null) {
+                return;
+            }
 
             // 第一步：检查是否存在 FATAL 错误，如有则中止订单并取消导航
             if (errorAggregator.hasFatalError(ctx)) {
@@ -151,12 +159,16 @@ public class ProxyOrderExecutor {
 
         for (Action action : node.getActions()) {
             ActionState actionState = findActionState(ctx, action.getActionId());
-            if (actionState == null) continue;
+            if (actionState == null) {
+                continue;
+            }
 
             String status = actionState.getActionStatus();
             // BlockingType 默认为 HARD（VDA5050 规范要求）
             String blocking = action.getBlockingType();
-            if (blocking == null || blocking.isEmpty()) blocking = BlockingType.HARD.getValue();
+            if (blocking == null || blocking.isEmpty()) {
+                blocking = BlockingType.HARD.getValue();
+            }
 
             // 检查正在运行的动作
             if (ActionStatus.RUNNING.getValue().equals(status)) {
@@ -200,7 +212,9 @@ public class ProxyOrderExecutor {
         boolean allDone = node.getActions().stream()
                 .allMatch(a -> {
                     ActionState as = findActionState(ctx, a.getActionId());
-                    if (as == null) return true;
+                    if (as == null) {
+                        return true;
+                    }
                     String s = as.getActionStatus();
                     return ActionStatus.FINISHED.getValue().equals(s)
                             || ActionStatus.FAILED.getValue().equals(s);
@@ -236,7 +250,9 @@ public class ProxyOrderExecutor {
             ctx.lock();
             try {
                 ActionState as = findActionState(ctx, actionId);
-                if (as == null) return;
+                if (as == null) {
+                    return;
+                }
 
                 if (ex != null) {
                     as.setActionStatus(ActionStatus.FAILED.getValue());
@@ -302,7 +318,9 @@ public class ProxyOrderExecutor {
         for (int i = nextIndex; i < order.getNodes().size(); i++) {
             Node n = order.getNodes().get(i);
             waypoints.add(n);
-            if (n.isReleased()) break;
+            if (n.isReleased()) {
+                break;
+            }
         }
         for (int i = ctx.getCurrentNodeIndex(); i < order.getEdges().size(); i++) {
             edges.add(order.getEdges().get(i));

@@ -36,7 +36,9 @@ public class OrderProgressTracker {
      */
     public OrderProgress getProgress(String vehicleId) {
         VehicleContext ctx = vehicleRegistry.get(vehicleId);
-        if (ctx == null) return OrderProgress.idle(vehicleId);
+        if (ctx == null) {
+            return OrderProgress.idle(vehicleId);
+        }
 
         ctx.lock();
         try {

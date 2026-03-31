@@ -77,7 +77,9 @@ public class OrderProgress {
      * @return 完成百分比，范围 0.0 - 100.0
      */
     public double getCompletionPercent() {
-        if (totalNodes == 0) return 100.0;
+        if (totalNodes == 0) {
+            return 100.0;
+        }
         return (double) completedNodes / totalNodes * 100.0;
     }
 

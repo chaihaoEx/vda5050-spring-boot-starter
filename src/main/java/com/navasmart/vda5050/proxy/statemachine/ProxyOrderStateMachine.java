@@ -1,7 +1,16 @@
 package com.navasmart.vda5050.proxy.statemachine;
 
 import com.navasmart.vda5050.error.ErrorAggregator;
-import com.navasmart.vda5050.model.*;
+import com.navasmart.vda5050.model.Action;
+import com.navasmart.vda5050.model.ActionState;
+import com.navasmart.vda5050.model.AgvState;
+import com.navasmart.vda5050.model.Edge;
+import com.navasmart.vda5050.model.EdgeState;
+import com.navasmart.vda5050.model.Factsheet;
+import com.navasmart.vda5050.model.InstantActions;
+import com.navasmart.vda5050.model.Node;
+import com.navasmart.vda5050.model.NodeState;
+import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.model.enums.ActionStatus;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyStateProvider;
@@ -125,9 +134,13 @@ public class ProxyOrderStateMachine {
     private boolean canAcceptOrder(VehicleContext ctx, Order order) {
         ProxyClientState state = ctx.getClientState();
         // IDLE 状态：无条件接受任何新订单
-        if (state == ProxyClientState.IDLE) return true;
+        if (state == ProxyClientState.IDLE) {
+            return true;
+        }
         // PAUSED 状态：不允许接受新订单，必须先恢复
-        if (state == ProxyClientState.PAUSED) return false;
+        if (state == ProxyClientState.PAUSED) {
+            return false;
+        }
 
         // RUNNING 状态：允许同 orderId 的订单更新（追加 horizon），或当前订单已全部完成
         Order current = ctx.getCurrentOrder();
@@ -139,7 +152,9 @@ public class ProxyOrderStateMachine {
 
     private boolean isCurrentOrderCompleted(VehicleContext ctx) {
         Order current = ctx.getCurrentOrder();
-        if (current == null) return true;
+        if (current == null) {
+            return true;
+        }
         AgvState agvState = ctx.getAgvState();
         return agvState.getNodeStates().isEmpty() && !agvState.isDriving();
     }

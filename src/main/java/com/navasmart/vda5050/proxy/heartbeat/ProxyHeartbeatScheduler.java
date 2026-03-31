@@ -1,7 +1,11 @@
 package com.navasmart.vda5050.proxy.heartbeat;
 
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
-import com.navasmart.vda5050.model.*;
+import com.navasmart.vda5050.model.AgvPosition;
+import com.navasmart.vda5050.model.AgvState;
+import com.navasmart.vda5050.model.BatteryState;
+import com.navasmart.vda5050.model.SafetyState;
+import com.navasmart.vda5050.model.Velocity;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyStateProvider;
 import com.navasmart.vda5050.proxy.callback.VehicleStatus;
@@ -78,7 +82,9 @@ public class ProxyHeartbeatScheduler {
 
     private void updateStateFromProvider(VehicleContext ctx) {
         VehicleStatus status = stateProvider.getVehicleStatus(ctx.getVehicleId());
-        if (status == null) return;
+        if (status == null) {
+            return;
+        }
 
         AgvState agvState = ctx.getAgvState();
 

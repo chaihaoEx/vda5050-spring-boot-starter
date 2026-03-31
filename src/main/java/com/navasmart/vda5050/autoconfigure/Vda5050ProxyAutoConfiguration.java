@@ -11,7 +11,6 @@ import com.navasmart.vda5050.proxy.heartbeat.ProxyHeartbeatScheduler;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderStateMachine;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
-import jakarta.annotation.PostConstruct;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

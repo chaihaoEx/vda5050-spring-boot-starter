@@ -74,7 +74,9 @@ public class ServerConnectionMonitor {
      */
     public void processConnection(String vehicleId, Connection connection) {
         VehicleContext ctx = vehicleRegistry.get(vehicleId);
-        if (ctx == null) return;
+        if (ctx == null) {
+            return;
+        }
 
         ctx.lock();
         try {

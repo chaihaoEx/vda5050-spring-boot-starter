@@ -1,6 +1,5 @@
 package com.navasmart.vda5050.autoconfigure;
 
-import com.navasmart.vda5050.model.Factsheet;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.mqtt.MqttInboundRouter;
 import com.navasmart.vda5050.server.callback.Vda5050ServerAdapter;

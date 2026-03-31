@@ -1,6 +1,11 @@
 package com.navasmart.vda5050.server.dispatch;
 
-import com.navasmart.vda5050.model.*;
+import com.navasmart.vda5050.model.Action;
+import com.navasmart.vda5050.model.ActionParameter;
+import com.navasmart.vda5050.model.Edge;
+import com.navasmart.vda5050.model.Node;
+import com.navasmart.vda5050.model.NodePosition;
+import com.navasmart.vda5050.model.Order;
 
 import java.util.ArrayList;
 import java.util.List;

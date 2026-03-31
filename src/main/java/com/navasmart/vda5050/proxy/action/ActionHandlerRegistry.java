@@ -42,7 +42,9 @@ public class ActionHandlerRegistry {
      */
     @Autowired(required = false)
     public void registerHandlers(List<ActionHandler> handlers) {
-        if (handlers == null) return;
+        if (handlers == null) {
+            return;
+        }
         for (ActionHandler handler : handlers) {
             for (String actionType : handler.getSupportedActionTypes()) {
                 handlerMap.put(actionType, handler);

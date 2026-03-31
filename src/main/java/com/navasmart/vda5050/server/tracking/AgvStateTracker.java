@@ -12,7 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -54,7 +57,9 @@ public class AgvStateTracker {
      */
     public void processState(String vehicleId, AgvState newState) {
         VehicleContext ctx = vehicleRegistry.get(vehicleId);
-        if (ctx == null) return;
+        if (ctx == null) {
+            return;
+        }
 
         ctx.lock();
         try {
@@ -91,7 +96,9 @@ public class AgvStateTracker {
      * 新出现的 actionId 或 status 变化的 actionId 都会触发回调。
      */
     private void detectActionStateChanges(String vehicleId, AgvState prev, AgvState curr) {
-        if (prev == null) return;
+        if (prev == null) {
+            return;
+        }
 
         // 构建前一次状态的 actionId -> actionStatus 映射
         Map<String, String> prevStatuses = prev.getActionStates().stream()
@@ -113,15 +120,25 @@ public class AgvStateTracker {
      */
     private void detectOrderCompletion(String vehicleId, VehicleContext ctx, AgvState state) {
         Order sentOrder = ctx.getLastSentOrder();
-        if (sentOrder == null) return;
+        if (sentOrder == null) {
+            return;
+        }
 
         // 只追踪自己发送的订单
-        if (!sentOrder.getOrderId().equals(state.getOrderId())) return;
+        if (!sentOrder.getOrderId().equals(state.getOrderId())) {
+            return;
+        }
 
         // 订单完成判定条件：nodeStates 为空 + 不在行驶 + 所有动作处于终态
-        if (!state.getNodeStates().isEmpty()) return;
-        if (state.isDriving()) return;
-        if (!allActionsTerminal(state.getActionStates())) return;
+        if (!state.getNodeStates().isEmpty()) {
+            return;
+        }
+        if (state.isDriving()) {
+            return;
+        }
+        if (!allActionsTerminal(state.getActionStates())) {
+            return;
+        }
 
         boolean hasFailedActions = state.getActionStates().stream()
                 .anyMatch(as -> ActionStatus.FAILED.getValue().equals(as.getActionStatus()));
