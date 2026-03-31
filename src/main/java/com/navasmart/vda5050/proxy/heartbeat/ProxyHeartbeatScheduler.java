@@ -13,6 +13,24 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * Proxy 模式下的心跳发布调度器，按固定间隔周期性发布 VDA5050 State 消息。
+ *
+ * <p>每个心跳周期（默认 1000ms，可通过 {@code vda5050.proxy.heartbeatIntervalMs} 配置），
+ * 对每辆 Proxy 车辆执行：
+ * <ol>
+ *   <li>调用 {@link Vda5050ProxyStateProvider#getVehicleStatus} 获取最新车辆状态</li>
+ *   <li>将状态映射到 AgvState 的位置、速度、电池、安全等字段</li>
+ *   <li>合并外部错误列表（保留协议层错误，替换外部错误）</li>
+ *   <li>通过 MQTT 发布 State 消息</li>
+ * </ol>
+ * </p>
+ *
+ * <p>线程安全：心跳发布在调度线程中执行，与订单执行循环使用相同的 VehicleContext 锁机制。</p>
+ *
+ * @see Vda5050ProxyStateProvider
+ * @see VehicleStatus
+ */
 @Component
 public class ProxyHeartbeatScheduler {
 
@@ -32,6 +50,12 @@ public class ProxyHeartbeatScheduler {
         this.properties = properties;
     }
 
+    /**
+     * 心跳发布主方法，按固定间隔（默认 1000ms）被 Spring Scheduling 调用。
+     *
+     * <p>遍历所有 Proxy 模式的车辆，从 StateProvider 获取最新状态并发布 State 消息。
+     * 单辆车的发布失败不会影响其他车辆。</p>
+     */
     @Scheduled(fixedDelayString = "${vda5050.proxy.heartbeatIntervalMs:1000}")
     public void publishHeartbeat() {
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
@@ -58,7 +82,7 @@ public class ProxyHeartbeatScheduler {
 
         AgvState agvState = ctx.getAgvState();
 
-        // Update position
+        // 映射位置信息到 AgvPosition
         AgvPosition pos = new AgvPosition();
         pos.setPositionInitialized(status.isPositionInitialized());
         pos.setX(status.getX());
@@ -68,14 +92,14 @@ public class ProxyHeartbeatScheduler {
         pos.setLocalizationScore(status.getLocalizationScore());
         agvState.setAgvPosition(pos);
 
-        // Update velocity
+        // 映射速度信息到 Velocity
         Velocity vel = new Velocity();
         vel.setVx(status.getVx());
         vel.setVy(status.getVy());
         vel.setOmega(status.getOmega());
         agvState.setVelocity(vel);
 
-        // Update battery
+        // 映射电池信息到 BatteryState
         BatteryState battery = new BatteryState();
         battery.setBatteryCharge(status.getBatteryCharge());
         battery.setBatteryVoltage(status.getBatteryVoltage());
@@ -84,20 +108,20 @@ public class ProxyHeartbeatScheduler {
         battery.setReach(status.getReach());
         agvState.setBatteryState(battery);
 
-        // Update safety
+        // 映射安全信息到 SafetyState
         SafetyState safety = new SafetyState();
         safety.setEStop(status.getEStop());
         safety.setFieldViolation(status.isFieldViolation());
         agvState.setSafetyState(safety);
 
-        // Update loads
+        // 映射载荷信息
         if (status.getLoads() != null) {
             agvState.setLoads(status.getLoads());
         }
 
-        // Merge external errors
+        // 合并外部错误：移除之前从 FMS 传入的非协议错误，替换为最新的外部错误
         if (status.getErrors() != null) {
-            // Replace non-protocol errors from FMS
+            // 保留协议层产生的错误（validation、orderUpdate、navigation 等），替换其余外部错误
             agvState.getErrors().removeIf(e -> !isProtocolError(e));
             agvState.getErrors().addAll(status.getErrors());
         }

@@ -13,6 +13,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+/**
+ * Proxy 模式下的连接状态发布器，负责在应用启动和关闭时发布 VDA5050 Connection 消息。
+ *
+ * <p>生命周期行为：
+ * <ul>
+ *   <li>应用启动后（{@link jakarta.annotation.PostConstruct}）：为所有 Proxy 车辆发布 ONLINE 状态</li>
+ *   <li>应用关闭前（{@link jakarta.annotation.PreDestroy}）：为所有 Proxy 车辆发布 OFFLINE 状态</li>
+ * </ul>
+ * </p>
+ *
+ * <p>VDA5050 规范要求使用 MQTT 的 retained 消息和 LWT（Last Will and Testament）机制，
+ * 确保连接状态在异常断开时也能被正确通知。</p>
+ *
+ * <p>线程安全：此类的方法仅在容器生命周期回调中被调用，不存在并发问题。</p>
+ */
 @Component
 public class ProxyConnectionPublisher {
 
@@ -29,6 +44,9 @@ public class ProxyConnectionPublisher {
         this.properties = properties;
     }
 
+    /**
+     * 应用启动后为所有 Proxy 车辆发布 ONLINE 连接状态。
+     */
     @PostConstruct
     public void publishOnline() {
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
@@ -37,6 +55,9 @@ public class ProxyConnectionPublisher {
         }
     }
 
+    /**
+     * 应用关闭前为所有 Proxy 车辆发布 OFFLINE 连接状态。
+     */
     @PreDestroy
     public void publishOffline() {
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {

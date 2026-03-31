@@ -15,6 +15,31 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Proxy 模式下的订单状态机，负责处理收到的 VDA5050 订单和即时动作。
+ *
+ * <p>核心职责：
+ * <ul>
+ *   <li>接收并验证新订单（{@link #receiveOrder}）</li>
+ *   <li>处理即时动作：cancelOrder、startPause/stopPause、factsheetRequest 等（{@link #receiveInstantActions}）</li>
+ *   <li>初始化 AgvState 中的 nodeStates、edgeStates、actionStates</li>
+ *   <li>管理 {@link ProxyClientState} 状态转换</li>
+ * </ul>
+ * </p>
+ *
+ * <p><b>订单接受条件：</b>
+ * <ul>
+ *   <li>IDLE 状态：无条件接受</li>
+ *   <li>RUNNING 状态：仅接受同 orderId 的订单更新，或当前订单已完成时接受新订单</li>
+ *   <li>PAUSED 状态：拒绝任何新订单</li>
+ * </ul>
+ * </p>
+ *
+ * <p>线程安全：所有操作均在 {@code VehicleContext.lock()} 保护下执行。</p>
+ *
+ * @see ProxyClientState
+ * @see ProxyOrderExecutor
+ */
 @Component
 public class ProxyOrderStateMachine {
 
@@ -35,6 +60,15 @@ public class ProxyOrderStateMachine {
         this.mqttGateway = mqttGateway;
     }
 
+    /**
+     * 接收并处理新的 VDA5050 订单。
+     *
+     * <p>订单接受条件：IDLE 状态无条件接受；RUNNING 状态仅接受同 orderId 的更新或当前订单已完成；
+     * PAUSED 状态拒绝。接受后初始化 AgvState 并将状态转为 RUNNING。</p>
+     *
+     * @param ctx   车辆上下文
+     * @param order 收到的订单消息
+     */
     public void receiveOrder(VehicleContext ctx, Order order) {
         ctx.lock();
         try {
@@ -57,6 +91,22 @@ public class ProxyOrderStateMachine {
         }
     }
 
+    /**
+     * 接收并处理 VDA5050 即时动作消息。
+     *
+     * <p>逐个处理消息中的每个动作：
+     * <ul>
+     *   <li>{@code cancelOrder} - 取消当前订单，状态转为 IDLE</li>
+     *   <li>{@code startPause} - 暂停执行，RUNNING -> PAUSED</li>
+     *   <li>{@code stopPause} - 恢复执行，PAUSED -> RUNNING</li>
+     *   <li>{@code factsheetRequest} - 获取并发布车辆 Factsheet</li>
+     *   <li>其他类型 - 作为即时动作添加到 actionStates，由执行器处理</li>
+     * </ul>
+     * </p>
+     *
+     * @param ctx            车辆上下文
+     * @param instantActions 即时动作消息
+     */
     public void receiveInstantActions(VehicleContext ctx, InstantActions instantActions) {
         ctx.lock();
         try {
@@ -68,12 +118,18 @@ public class ProxyOrderStateMachine {
         }
     }
 
+    /**
+     * 判断当前状态下是否可以接受新订单。
+     * IDLE -> 无条件接受；PAUSED -> 拒绝；RUNNING -> 同 orderId 的更新或当前订单已完成。
+     */
     private boolean canAcceptOrder(VehicleContext ctx, Order order) {
         ProxyClientState state = ctx.getClientState();
+        // IDLE 状态：无条件接受任何新订单
         if (state == ProxyClientState.IDLE) return true;
+        // PAUSED 状态：不允许接受新订单，必须先恢复
         if (state == ProxyClientState.PAUSED) return false;
 
-        // RUNNING: accept same orderId (order update) or if current order completed
+        // RUNNING 状态：允许同 orderId 的订单更新（追加 horizon），或当前订单已全部完成
         Order current = ctx.getCurrentOrder();
         if (current != null && current.getOrderId().equals(order.getOrderId())) {
             return true;
@@ -138,8 +194,9 @@ public class ProxyOrderStateMachine {
         errorAggregator.clearAllErrors(ctx);
     }
 
+    /** 处理单个即时动作：内置动作（cancelOrder 等）直接处理，其他加入 actionStates 由执行器异步处理 */
     private void processInstantAction(VehicleContext ctx, Action action) {
-        // Check for duplicate action IDs
+        // 检查重复的 actionId，避免重复处理同一动作
         for (ActionState as : ctx.getAgvState().getActionStates()) {
             if (as.getActionId().equals(action.getActionId())) {
                 return; // Already exists
@@ -147,12 +204,13 @@ public class ProxyOrderStateMachine {
         }
 
         String actionType = action.getActionType();
+        // 根据 actionType 分发处理：内置动作由状态机直接处理，自定义动作加入等待队列
         switch (actionType) {
             case "cancelOrder" -> handleCancelOrder(ctx, action);
             case "startPause", "stopPause" -> handlePause(ctx, action, actionType);
             case "factsheetRequest" -> handleFactsheetRequest(ctx, action);
             default -> {
-                // Add to action states as instant action
+                // 非内置动作：添加到 actionStates 队列，由 ProxyOrderExecutor 在执行循环中处理
                 ActionState as = new ActionState();
                 as.setActionId(action.getActionId());
                 as.setActionType(action.getActionType());
