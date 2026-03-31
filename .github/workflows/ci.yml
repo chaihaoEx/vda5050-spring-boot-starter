@@ -23,7 +23,7 @@ jobs:
           cache: 'maven'
 
       - name: Build & Verify
-        run: ./mvnw verify --batch-mode --no-transfer-progress
+        run: mvn verify --batch-mode --no-transfer-progress
 
       - name: Upload JAR artifact
         if: success()

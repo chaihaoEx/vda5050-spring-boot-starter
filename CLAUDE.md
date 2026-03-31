@@ -11,7 +11,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 mvn verify --batch-mode --no-transfer-progress  # CI-style (if mvnw download fails in China)
 ```
 
-17 unit tests in `src/test/java/`. JUnit 5 via `spring-boot-starter-test`.
+60 tests (unit + integration) across 15 files in `src/test/java/`. JUnit 5 via `spring-boot-starter-test`. Integration tests use Moquette embedded MQTT broker (`io.moquette:moquette-broker:0.17`, test scope).
+
+### Test Categories
+- **Unit tests**: `TimestampUtilTest`, `Vda5050PropertiesTest`, `MqttTopicResolverTest`, `ModelSerializationTest`, `ErrorHandlingTest`
+- **Auto-config tests**: `AutoConfigurationTest`, `ProxyAutoConfigurationTest`, `ServerAutoConfigurationTest` (use `ApplicationContextRunner`)
+- **Integration tests**: `ProxyOrderFlowTest`, `ProxyActionHandlerTest`, `ServerOrderDispatchTest`, `ServerStateTrackingTest` (use `@SpringBootTest` + embedded broker)
+- **Test infra**: `EmbeddedMqttBroker`, `MockProxyAdapter`, `MockServerAdapter` in `test/` package
 
 ## CI
 
@@ -41,7 +47,7 @@ VDA5050 Spring Boot Starter — a Java/Spring Boot library (not an application) 
 
 ## Architecture
 
-69 Java source files across `model/`, `mqtt/`, `proxy/`, `server/`, `vehicle/`, `error/`, `util/`, `autoconfigure/`.
+85 Java source files (69 classes + 16 package-info) across `model/`, `mqtt/`, `proxy/`, `server/`, `vehicle/`, `error/`, `util/`, `autoconfigure/`.
 
 ### Auto-Configuration (3 classes in `autoconfigure/`)
 - `Vda5050AutoConfiguration`: shared beans — ObjectMapper (NON_NULL, ignore unknown), MqttClient, MqttGateway, MqttInboundRouter, VehicleRegistry, ErrorAggregator. Enables `@EnableScheduling`.
