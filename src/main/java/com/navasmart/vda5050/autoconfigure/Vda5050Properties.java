@@ -5,11 +5,35 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * VDA5050 Starter 配置属性，前缀为 {@code vda5050}。
+ *
+ * <p>配置示例：
+ * <pre>
+ * vda5050:
+ *   mqtt:
+ *     host: mqtt.example.com
+ *     port: 1883
+ *   proxy:
+ *     enabled: true
+ *     vehicles:
+ *       - manufacturer: MyCompany
+ *         serialNumber: forklift01
+ *   server:
+ *     enabled: true
+ *     vehicles:
+ *       - manufacturer: ThirdParty
+ *         serialNumber: agv01
+ * </pre>
+ */
 @ConfigurationProperties(prefix = "vda5050")
 public class Vda5050Properties {
 
+    /** MQTT 连接配置 */
     private MqttConfig mqtt = new MqttConfig();
+    /** Proxy 模式配置 */
     private ProxyConfig proxy = new ProxyConfig();
+    /** Server 模式配置 */
     private ServerConfig server = new ServerConfig();
 
     public MqttConfig getMqtt() { return mqtt; }
@@ -21,17 +45,31 @@ public class Vda5050Properties {
     public ServerConfig getServer() { return server; }
     public void setServer(ServerConfig server) { this.server = server; }
 
+    /**
+     * MQTT 连接配置（{@code vda5050.mqtt.*}）。
+     */
     public static class MqttConfig {
+        /** MQTT Broker 地址。默认：{@code localhost} */
         private String host = "localhost";
+        /** MQTT Broker 端口。默认：{@code 1883} */
         private int port = 1883;
+        /** 传输协议：{@code tcp} 或 {@code websocket}。默认：{@code tcp} */
         private String transport = "tcp";
+        /** 心跳间隔（秒）。默认：{@code 60} */
         private int keepAlive = 60;
+        /** MQTT 用户名。默认：空字符串（匿名连接） */
         private String username = "";
+        /** MQTT 密码。默认：空字符串 */
         private String password = "";
+        /** 是否使用 Clean Session。默认：{@code true} */
         private boolean cleanSession = true;
+        /** MQTT Client ID 前缀。默认：{@code vda5050} */
         private String clientIdPrefix = "vda5050";
+        /** VDA5050 Topic 中的接口名称。默认：{@code uagv} */
         private String interfaceName = "uagv";
+        /** VDA5050 Topic 中的主版本号。默认：{@code v2} */
         private String majorVersion = "v2";
+        /** VDA5050 协议版本号，写入消息的 version 字段。默认：{@code 2.0.0} */
         private String protocolVersion = "2.0.0";
 
         public String getHost() { return host; }
@@ -68,12 +106,21 @@ public class Vda5050Properties {
         public void setProtocolVersion(String protocolVersion) { this.protocolVersion = protocolVersion; }
     }
 
+    /**
+     * Proxy 模式配置（{@code vda5050.proxy.*}）。
+     */
     public static class ProxyConfig {
+        /** 是否启用 Proxy 模式。默认：{@code false} */
         private boolean enabled = false;
+        /** AgvState 心跳发布间隔（毫秒）。默认：{@code 1000} */
         private long heartbeatIntervalMs = 1000;
+        /** 订单执行循环间隔（毫秒）。默认：{@code 200} */
         private long orderLoopIntervalMs = 200;
+        /** 导航超时时间（毫秒）。默认：{@code 300000}（5 分钟） */
         private long navigationTimeoutMs = 300000;
+        /** 单个动作超时时间（毫秒）。默认：{@code 120000}（2 分钟） */
         private long actionTimeoutMs = 120000;
+        /** 代理车辆列表 */
         private List<VehicleConfig> vehicles = new ArrayList<>();
 
         public boolean isEnabled() { return enabled; }
@@ -95,10 +142,17 @@ public class Vda5050Properties {
         public void setVehicles(List<VehicleConfig> vehicles) { this.vehicles = vehicles; }
     }
 
+    /**
+     * Server 模式配置（{@code vda5050.server.*}）。
+     */
     public static class ServerConfig {
+        /** 是否启用 Server 模式。默认：{@code false} */
         private boolean enabled = false;
+        /** AGV 状态上报超时时间（毫秒），超时触发 onVehicleTimeout 回调。默认：{@code 60000}（1 分钟） */
         private long stateTimeoutMs = 60000;
+        /** 连接检查间隔（毫秒）。默认：{@code 30000}（30 秒） */
         private long connectionCheckMs = 30000;
+        /** 受控 AGV 车辆列表 */
         private List<VehicleConfig> vehicles = new ArrayList<>();
 
         public boolean isEnabled() { return enabled; }
@@ -114,9 +168,15 @@ public class Vda5050Properties {
         public void setVehicles(List<VehicleConfig> vehicles) { this.vehicles = vehicles; }
     }
 
+    /**
+     * 单辆车辆的配置信息。
+     */
     public static class VehicleConfig {
+        /** AGV 制造商名称，对应 VDA5050 Topic 中的 manufacturer 部分。必填。 */
         private String manufacturer;
+        /** AGV 唯一序列号，对应 VDA5050 Topic 中的 serialNumber 部分。必填。 */
         private String serialNumber;
+        /** 机器人类型，如 FORKLIFT、CARRIER、TUGGER。默认：{@code FORKLIFT} */
         private String robotType = "FORKLIFT";
 
         public String getManufacturer() { return manufacturer; }
