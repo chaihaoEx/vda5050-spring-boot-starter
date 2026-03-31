@@ -22,7 +22,7 @@ import java.util.function.BiConsumer;
 /**
  * MQTT 入站消息路由器，实现 {@link MqttCallback} 接口，负责将收到的消息按 Topic 后缀分发到对应的处理器。
  *
- * <h3>路由规则</h3>
+ * <h2>路由规则</h2>
  * <p>收到消息后，提取 Topic 的最后一段后缀，并根据后缀分发：</p>
  * <ul>
  *   <li>{@code order} -> {@link #setOrderHandler(BiConsumer)}（Proxy 模式接收主控下发的订单）</li>
@@ -80,7 +80,6 @@ public class MqttInboundRouter implements MqttCallback {
      *   <li>将 JSON payload 反序列化为对应模型对象</li>
      *   <li>调用已注册的 handler 进行业务处理</li>
      * </ol>
-     * </p>
      *
      * @param topic   消息的 MQTT Topic
      * @param message MQTT 消息体

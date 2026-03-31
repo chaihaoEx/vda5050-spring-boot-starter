@@ -19,19 +19,19 @@ import org.springframework.stereotype.Component;
 /**
  * MQTT 连接管理器，负责与 Broker 的连接建立、断开及 Topic 订阅。
  *
- * <h3>生命周期</h3>
+ * <h2>生命周期</h2>
  * <ul>
  *   <li>{@link PostConstruct} - 容器启动时自动连接 Broker 并订阅相关 Topic</li>
  *   <li>{@link PreDestroy} - 容器关闭时优雅断开连接</li>
  * </ul>
  *
- * <h3>LWT（Last Will and Testament）配置</h3>
+ * <h2>LWT（Last Will and Testament）配置</h2>
  * <p>为 Proxy 模式车辆配置 LWT 消息：当客户端异常断开时，Broker 自动向 connection Topic
  * 发布 {@code CONNECTIONBROKEN} 状态（QoS 1 + retained），确保主控能感知连接中断。</p>
  * <p><b>注意：</b>Paho MQTT 客户端仅支持一条 LWT 消息。当存在多辆 Proxy 车辆时，
  * 仅为第一辆车设置 LWT。生产环境下建议为每辆 Proxy 车辆使用独立的 MqttClient。</p>
  *
- * <h3>自动重连</h3>
+ * <h2>自动重连</h2>
  * <p>通过 {@code MqttConnectOptions.setAutomaticReconnect(true)} 启用 Paho 内置的自动重连机制。</p>
  */
 @Component
@@ -68,7 +68,6 @@ public class MqttConnectionManager {
      *   <li>建立连接</li>
      *   <li>根据 Proxy/Server 模式订阅对应 Topic</li>
      * </ol>
-     * </p>
      *
      * @throws MqttException 连接或订阅失败时抛出
      */

@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * 单车状态上下文容器，持有一辆 AGV 在 Proxy 模式和 Server 模式下的全部运行时状态。
  *
- * <h3>线程安全</h3>
+ * <h2>线程安全</h2>
  * <p>本类<b>不是</b>天然线程安全的。对 Proxy/Server 状态字段的读写必须在持有 {@link #lock()} 的前提下进行。
  * 典型用法：</p>
  * <pre>
@@ -23,7 +23,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * </pre>
  * <p>Header ID 生成器（{@code nextStateHeaderId()} 等）基于 {@link AtomicInteger}，可在无锁场景下安全调用。</p>
  *
- * <h3>两套状态</h3>
+ * <h2>两套状态</h2>
  * <ul>
  *   <li><b>Proxy 模式状态</b>：{@code agvState}、{@code currentOrder}、{@code clientState} 等 —— 本应用模拟 AGV 向主控上报</li>
  *   <li><b>Server 模式状态</b>：{@code lastReceivedState}、{@code lastSentOrder}、{@code connectionState} 等 —— 本应用作为主控接收 AGV 上报</li>

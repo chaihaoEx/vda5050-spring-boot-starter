@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 /**
  * MQTT 消息发布网关，封装 VDA5050 各类消息的序列化与发布逻辑。
  *
- * <h3>QoS 策略</h3>
+ * <h2>QoS 策略</h2>
  * <ul>
  *   <li><b>QoS 0</b>（至多一次）：用于 state、order、instantActions、factsheet 等高频或非关键消息</li>
  *   <li><b>QoS 1 + retained</b>（至少一次 + 保留消息）：仅用于 connection 消息，

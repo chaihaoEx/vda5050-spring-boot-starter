@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
  * <p>内部基于 {@link ConcurrentHashMap} 存储，key 格式为 {@code "manufacturer:serialNumber"}，
  * 线程安全，支持并发读写。</p>
  *
- * <h3>初始化时机</h3>
+ * <h2>初始化时机</h2>
  * <p>在 Spring 容器启动时通过 {@link PostConstruct} 回调自动从配置中读取 Proxy 和 Server 模式的车辆列表，
  * 并将其注册到表中。后续也可通过 {@link #getOrCreate(String, String)} 动态添加车辆。</p>
  */

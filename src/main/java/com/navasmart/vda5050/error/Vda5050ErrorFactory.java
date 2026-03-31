@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * VDA5050 错误对象工厂，用于创建符合协议规范的 {@link Error} 实例。
  *
- * <h3>VDA5050 错误级别含义</h3>
+ * <h2>VDA5050 错误级别含义</h2>
  * <ul>
  *   <li><b>WARNING</b>：警告级别，AGV 仍可继续运行，但存在需要关注的异常情况</li>
  *   <li><b>FATAL</b>：致命级别，AGV 无法继续执行当前任务，需要外部干预</li>

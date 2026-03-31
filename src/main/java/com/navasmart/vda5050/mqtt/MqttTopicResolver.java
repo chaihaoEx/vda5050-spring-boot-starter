@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
  * <pre>
  *   {interfaceName}/{majorVersion}/{manufacturer}/{serialNumber}/{topicName}
  * </pre>
- * 例如：{@code uagv/v2/RobotCompany/AGV001/order}</p>
+ * 例如：{@code uagv/v2/RobotCompany/AGV001/order}
  *
  * <p>其中 {@code interfaceName} 和 {@code majorVersion} 从全局配置
  * {@link Vda5050Properties} 中读取，{@code manufacturer} 和 {@code serialNumber}

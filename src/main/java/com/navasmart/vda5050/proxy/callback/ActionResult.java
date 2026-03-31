@@ -11,7 +11,6 @@ package com.navasmart.vda5050.proxy.callback;
  *   <li>{@link #success(String)} - 动作执行成功，附带结果描述</li>
  *   <li>{@link #failure(String)} - 动作执行失败，附带失败原因</li>
  * </ul>
- * </p>
  *
  * <p>成功时，对应的 ActionState 将被设置为 FINISHED；
  * 失败时，对应的 ActionState 将被设置为 FAILED，失败原因写入 resultDescription。</p>

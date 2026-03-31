@@ -27,7 +27,6 @@ import java.util.UUID;
  *   <li>{@link #resumeVehicle} - 恢复车辆（stopPause）</li>
  *   <li>{@link #requestFactsheet} - 请求 Factsheet</li>
  * </ul>
- * </p>
  *
  * <p>线程安全：此类通过 VehicleContext 的锁机制保证线程安全。</p>
  *

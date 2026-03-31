@@ -31,7 +31,6 @@ public interface Vda5050ProxyStateProvider {
      *   <li>{@link VehicleStatus#getEStop()} 应返回 VDA5050 规范定义的急停状态字符串</li>
      *   <li>{@link VehicleStatus#getBatteryCharge()} 应返回 0.0 - 100.0 之间的百分比值</li>
      * </ul>
-     * </p>
      *
      * @param vehicleId 车辆标识符
      * @return 车辆当前状态，不应返回 {@code null}

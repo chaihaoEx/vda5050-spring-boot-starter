@@ -22,7 +22,6 @@ import org.springframework.stereotype.Component;
  *   <li><b>Connection 消息处理</b>：接收 AGV 发布的 Connection 消息，
  *       检测连接状态变化并触发 {@link Vda5050ServerAdapter#onConnectionStateChanged} 回调</li>
  * </ul>
- * </p>
  *
  * <p>线程安全：超时检测在调度线程中执行，Connection 处理通过 VehicleContext 锁保护。</p>
  *

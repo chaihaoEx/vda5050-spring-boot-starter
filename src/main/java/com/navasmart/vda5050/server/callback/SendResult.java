@@ -8,7 +8,6 @@ package com.navasmart.vda5050.server.callback;
  *   <li>{@link #success()} - 发送成功</li>
  *   <li>{@link #failure(String)} - 发送失败，附带原因（如车辆未注册、订单 ID 不匹配等）</li>
  * </ul>
- * </p>
  *
  * <p>线程安全：此类为不可变对象，天然线程安全。</p>
  *

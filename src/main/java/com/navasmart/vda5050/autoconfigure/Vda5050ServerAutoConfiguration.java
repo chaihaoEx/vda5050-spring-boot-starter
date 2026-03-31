@@ -22,7 +22,6 @@ import org.springframework.context.annotation.Configuration;
  * <ul>
  *   <li>{@link Vda5050ServerAdapter} - Server 回调适配器（必须，用于接收状态变更通知）</li>
  * </ul>
- * </p>
  *
  * <p>缺少 {@link Vda5050ServerAdapter} Bean 时，AgvStateTracker 和 ServerConnectionMonitor
  * 不会被创建（通过 {@link ConditionalOnBean} 控制），但 OrderDispatcher、InstantActionSender

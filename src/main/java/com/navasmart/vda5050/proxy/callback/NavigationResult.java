@@ -9,7 +9,6 @@ package com.navasmart.vda5050.proxy.callback;
  *   <li>{@link #success(String)} - 导航成功，并指定实际到达的节点 ID</li>
  *   <li>{@link #failure(String)} - 导航失败，附带失败原因</li>
  * </ul>
- * </p>
  *
  * <p>导航失败时，框架将记录 FATAL 级别错误并中止当前订单执行。</p>
  *

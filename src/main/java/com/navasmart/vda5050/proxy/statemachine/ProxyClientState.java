@@ -11,7 +11,6 @@ package com.navasmart.vda5050.proxy.statemachine;
  *   <li>{@code RUNNING -> IDLE}：订单执行完成、cancelOrder 或发生 FATAL 错误时</li>
  *   <li>{@code PAUSED -> IDLE}：不允许（PAUSED 状态下不接受新订单也不直接转 IDLE）</li>
  * </ul>
- * </p>
  *
  * @see ProxyOrderStateMachine
  */

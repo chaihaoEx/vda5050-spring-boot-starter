@@ -29,7 +29,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *   <li>车辆管理：VehicleRegistry</li>
  *   <li>错误处理：Vda5050ErrorFactory、ErrorAggregator</li>
  * </ul>
- * </p>
  *
  * <p>所有 Bean 均标注 {@link ConditionalOnMissingBean}，用户可通过自定义 Bean 覆盖默认实现。</p>
  *

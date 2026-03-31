@@ -35,7 +35,6 @@ import java.util.concurrent.CompletableFuture;
  *   <li>当前节点所有动作完成后，推进到下一个节点并发起导航</li>
  *   <li>所有节点处理完毕后，订单完成，状态转为 IDLE</li>
  * </ol>
- * </p>
  *
  * <p><b>BlockingType 调度逻辑：</b>
  * <ul>
@@ -43,7 +42,6 @@ import java.util.concurrent.CompletableFuture;
  *   <li>{@code SOFT} - 半阻塞型动作：可以同时启动多个，但在执行期间阻止车辆导航</li>
  *   <li>{@code NONE} - 非阻塞型动作：可以与导航并行执行</li>
  * </ul>
- * </p>
  *
  * <p><b>导航回调处理：</b>导航通过 {@link Vda5050ProxyVehicleAdapter#onNavigate} 异步执行。
  * 导航完成后通过 {@link java.util.concurrent.CompletableFuture#whenComplete} 回调更新状态：

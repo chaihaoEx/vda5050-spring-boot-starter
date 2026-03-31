@@ -26,7 +26,6 @@ import org.springframework.context.annotation.Configuration;
  *   <li>{@link Vda5050ProxyStateProvider} - 车辆状态提供者（必须）</li>
  *   <li>{@link com.navasmart.vda5050.proxy.action.ActionHandler} - 自定义动作处理器（可选，0 到多个）</li>
  * </ul>
- * </p>
  *
  * <p>缺少必要的 Bean 时，对应的组件不会被创建（通过 {@link ConditionalOnBean} 控制），
  * 但不会报错。例如缺少 Vda5050ProxyStateProvider 时，ProxyHeartbeatScheduler 不会被创建。</p>

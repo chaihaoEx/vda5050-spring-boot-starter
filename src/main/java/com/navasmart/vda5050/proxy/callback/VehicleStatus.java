@@ -17,7 +17,6 @@ import java.util.List;
  *   <li>安全信息（eStop, fieldViolation）-> SafetyState</li>
  *   <li>可选信息（loads, errors）-> 直接映射到 State 消息</li>
  * </ul>
- * </p>
  *
  * <p>线程安全：此类为简单 POJO，非线程安全。每次调用应创建新实例或确保外部同步。</p>
  *

@@ -21,7 +21,6 @@ import org.springframework.stereotype.Component;
  *   <li>应用启动后（{@link jakarta.annotation.PostConstruct}）：为所有 Proxy 车辆发布 ONLINE 状态</li>
  *   <li>应用关闭前（{@link jakarta.annotation.PreDestroy}）：为所有 Proxy 车辆发布 OFFLINE 状态</li>
  * </ul>
- * </p>
  *
  * <p>VDA5050 规范要求使用 MQTT 的 retained 消息和 LWT（Last Will and Testament）机制，
  * 确保连接状态在异常断开时也能被正确通知。</p>

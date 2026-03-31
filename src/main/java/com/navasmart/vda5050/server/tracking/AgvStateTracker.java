@@ -28,7 +28,6 @@ import java.util.stream.Collectors;
  *   <li><b>订单完成检测</b>：nodeStates 为空 + 不在行驶 + 所有动作终态</li>
  *   <li><b>错误变更检测</b>：对比 errors 列表的新增和移除</li>
  * </ul>
- * </p>
  *
  * <p>检测到变更后，通过 {@link Vda5050ServerAdapter} 的对应回调方法通知用户。</p>
  *

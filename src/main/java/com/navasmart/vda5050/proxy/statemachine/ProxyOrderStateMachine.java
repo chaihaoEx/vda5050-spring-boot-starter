@@ -34,7 +34,6 @@ import java.util.Map;
  *   <li>初始化 AgvState 中的 nodeStates、edgeStates、actionStates</li>
  *   <li>管理 {@link ProxyClientState} 状态转换</li>
  * </ul>
- * </p>
  *
  * <p><b>订单接受条件：</b>
  * <ul>
@@ -42,7 +41,6 @@ import java.util.Map;
  *   <li>RUNNING 状态：仅接受同 orderId 的订单更新，或当前订单已完成时接受新订单</li>
  *   <li>PAUSED 状态：拒绝任何新订单</li>
  * </ul>
- * </p>
  *
  * <p>线程安全：所有操作均在 {@code VehicleContext.lock()} 保护下执行。</p>
  *
@@ -111,7 +109,6 @@ public class ProxyOrderStateMachine {
      *   <li>{@code factsheetRequest} - 获取并发布车辆 Factsheet</li>
      *   <li>其他类型 - 作为即时动作添加到 actionStates，由执行器处理</li>
      * </ul>
-     * </p>
      *
      * @param ctx            车辆上下文
      * @param instantActions 即时动作消息

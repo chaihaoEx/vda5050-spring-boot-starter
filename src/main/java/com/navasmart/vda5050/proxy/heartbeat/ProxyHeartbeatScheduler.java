@@ -28,7 +28,6 @@ import org.springframework.stereotype.Component;
  *   <li>合并外部错误列表（保留协议层错误，替换外部错误）</li>
  *   <li>通过 MQTT 发布 State 消息</li>
  * </ol>
- * </p>
  *
  * <p>线程安全：心跳发布在调度线程中执行，与订单执行循环使用相同的 VehicleContext 锁机制。</p>
  *

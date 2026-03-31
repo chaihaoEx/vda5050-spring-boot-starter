@@ -17,7 +17,6 @@ import java.time.format.DateTimeFormatter;
  *   String ts = TimestampUtil.now();               // 当前 UTC 时间
  *   String ts = TimestampUtil.format(epochMillis);  // 指定毫秒时间戳
  * </pre>
- * </p>
  */
 public final class TimestampUtil {
 
