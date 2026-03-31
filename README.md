@@ -189,6 +189,7 @@ public class MyDispatchService {
 | [10 配置指南](docs/10-configuration-guide.md) | 完整 YAML 参考 |
 | [11 错误处理](docs/11-error-handling.md) | 错误分类与聚合 |
 | [12 集成指南](docs/12-integration-guide.md) | 两种模式的实操示例 |
+| [13 Proxy 快速集成](docs/13-proxy-quick-start.md) | 10 分钟完成 Proxy 模式集成 |
 
 ## 参考项目
 
