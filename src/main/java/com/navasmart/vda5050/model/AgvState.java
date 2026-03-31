@@ -5,33 +5,101 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * VDA5050 AGV 状态消息（State）。
+ * <p>
+ * 由 AGV 周期性上报给调度系统，包含 AGV 的当前位置、速度、电池状态、
+ * 驾驶状态、订单执行进度、动作执行状态、错误和信息等。
+ * <p>
+ * MQTT 主题方向：AGV -> 主控
+ * <p>
+ * 主题格式：{@code <interfaceName>/<majorVersion>/<manufacturer>/<serialNumber>/state}
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AgvState {
 
+    /** 消息头序号，每次发送递增，用于消息排序和去重。 */
     private int headerId;
+
+    /** 消息时间戳，ISO 8601 格式。 */
     private String timestamp;
+
+    /** VDA5050 协议版本号。 */
     private String version;
+
+    /** AGV 制造商名称。 */
     private String manufacturer;
+
+    /** AGV 唯一序列号。 */
     private String serialNumber;
+
+    /** 当前正在执行的订单 ID。如果没有订单，为空字符串。 */
     private String orderId;
+
+    /** 当前订单的更新序号，与 Order 中的 orderUpdateId 对应。 */
     private long orderUpdateId;
+
+    /** 当前使用的区域集 ID。可选字段。 */
     private String zoneSetId;
+
+    /** AGV 最近经过或驶离的节点 ID。 */
     private String lastNodeId;
+
+    /** 最近经过节点的 sequenceId。 */
     private int lastNodeSequenceId;
+
+    /** 尚未经过的节点状态列表（按行驶顺序排列）。 */
     private List<NodeState> nodeStates = new ArrayList<>();
+
+    /** 尚未通过的边状态列表（按行驶顺序排列）。 */
     private List<EdgeState> edgeStates = new ArrayList<>();
+
+    /** AGV 当前位置信息。可选字段，如果 AGV 无法提供定位则为 null。 */
     private AgvPosition agvPosition;
+
+    /** AGV 当前速度信息。可选字段。 */
     private Velocity velocity;
+
+    /** AGV 当前承载的负载列表。可选字段。 */
     private List<Load> loads;
+
+    /** AGV 是否正在行驶。{@code true} 表示 AGV 当前正在移动。 */
     private boolean driving;
+
+    /** AGV 是否处于暂停状态。{@code true} 表示 AGV 因暂停指令而停止。 */
     private boolean paused;
+
+    /** AGV 是否请求新的 base 节点。{@code true} 表示 AGV 即将到达最后一个 base 节点，需要新的路径。 */
     private boolean newBaseRequested;
+
+    /** 自最后一个节点以来行驶的距离（单位：米）。可选字段。 */
     private double distanceSinceLastNode;
+
+    /** 当前所有动作的执行状态列表。 */
     private List<ActionState> actionStates = new ArrayList<>();
+
+    /** 电池状态信息，包含电量百分比、电压、是否充电等。 */
     private BatteryState batteryState;
+
+    /**
+     * AGV 运行模式。取值包括：
+     * <ul>
+     *   <li>{@code AUTOMATIC} - 自动模式，AGV 由调度系统控制</li>
+     *   <li>{@code SEMIAUTOMATIC} - 半自动模式</li>
+     *   <li>{@code MANUAL} - 手动模式</li>
+     *   <li>{@code SERVICE} - 维护模式</li>
+     *   <li>{@code TEACHIN} - 示教模式</li>
+     * </ul>
+     */
     private String operatingMode;
+
+    /** 当前错误列表。错误解决后应从列表中移除。 */
     private List<Error> errors = new ArrayList<>();
+
+    /** 信息列表，用于上报非错误性质的通知或调试信息。 */
     private List<Info> informations = new ArrayList<>();
+
+    /** 安全状态，包含急停状态和安全场使能状态。 */
     private SafetyState safetyState;
 
     public AgvState() {}

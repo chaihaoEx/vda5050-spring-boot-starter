@@ -5,25 +5,74 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * VDA5050 路径边（Edge）。
+ * <p>
+ * 定义 AGV 行驶路径中连接两个相邻节点的边，包含行驶约束（速度、高度、方向等）
+ * 以及可选的轨迹定义。通过 {@code released} 标志区分已确认边和预览边。
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Edge {
 
+    /** 边的唯一标识符，对应地图中的边 ID。 */
     private String edgeId;
+
+    /** 边在订单中的序列号。边的序号为奇数（1, 3, 5, ...），位于两个节点之间。 */
     private int sequenceId;
+
+    /** 边的人类可读描述。可选字段。 */
     private String edgeDescription;
+
+    /**
+     * 边的释放标志。
+     * {@code true} 表示已确认边（base），AGV 必须通过；
+     * {@code false} 表示预览边（horizon），AGV 仅用于路径规划。
+     */
     private boolean released;
+
+    /** 起始节点 ID，对应该边起点的 {@link Node#getNodeId()}。 */
     private String startNodeId;
+
+    /** 结束节点 ID，对应该边终点的 {@link Node#getNodeId()}。 */
     private String endNodeId;
+
+    /** 该边上允许的最大行驶速度（单位：米/秒）。可选字段。 */
     private Double maxSpeed;
+
+    /** 该边上允许的最大负载高度（单位：米）。可选字段。 */
     private Double maxHeight;
+
+    /** 该边上允许的最小负载高度（单位：米）。可选字段。 */
     private Double minHeight;
+
+    /** AGV 在该边上行驶时的朝向角度（单位：弧度）。可选字段。 */
     private Double orientation;
+
+    /**
+     * 朝向类型。可选字段。取值包括：
+     * <ul>
+     *   <li>{@code GLOBAL} - 全局朝向，AGV 在整条边上保持指定朝向</li>
+     *   <li>{@code TANGENTIAL} - 切线朝向，AGV 朝向沿轨迹切线方向</li>
+     * </ul>
+     */
     private String orientationType;
+
+    /** 行驶方向。可选字段。如 "left"、"right"、"straight" 等，由 AGV 厂商定义。 */
     private String direction;
+
+    /** 是否允许旋转。可选字段。{@code true} 表示 AGV 可在该边上旋转。 */
     private Boolean rotationAllowed;
+
+    /** 最大旋转速度（单位：弧度/秒）。可选字段。 */
     private Double maxRotationSpeed;
+
+    /** NURBS 轨迹定义。可选字段。如果不提供，AGV 自行规划起点到终点的路径。 */
     private Trajectory trajectory;
+
+    /** 边的长度（单位：米）。可选字段，用于路径规划。 */
     private Double length;
+
+    /** 经过该边时需要执行的动作列表。可以为空列表。 */
     private List<Action> actions = new ArrayList<>();
 
     public Edge() {}

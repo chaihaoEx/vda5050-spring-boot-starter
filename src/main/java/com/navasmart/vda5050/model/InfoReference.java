@@ -2,10 +2,26 @@ package com.navasmart.vda5050.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+/**
+ * VDA5050 信息引用。
+ * <p>
+ * 以键值对形式描述与信息条目相关的引用数据，用于提供信息的详细上下文。
+ * </p>
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class InfoReference {
 
+    /**
+     * 引用键名。
+     * <p>
+     * 例如 {@code "orderId"}、{@code "nodeId"}、{@code "actionId"} 等。
+     * </p>
+     */
     private String referenceKey;
+
+    /**
+     * 引用键对应的值。
+     */
     private String referenceValue;
 
     public InfoReference() {}
