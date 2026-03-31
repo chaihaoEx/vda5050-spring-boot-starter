@@ -6,6 +6,8 @@ import io.moquette.broker.config.MemoryConfig;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Properties;
 
 /**
@@ -30,6 +32,9 @@ public class EmbeddedMqttBroker {
         props.setProperty("host", "127.0.0.1");
         props.setProperty("port", String.valueOf(port));
         props.setProperty("allow_anonymous", "true");
+        // 将 H2 持久化文件写入临时目录，避免污染项目根目录
+        Path tempDir = Files.createTempDirectory("moquette-test");
+        props.setProperty("data_path", tempDir.toString());
 
         IConfig config = new MemoryConfig(props);
         server.startServer(config);

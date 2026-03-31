@@ -30,6 +30,9 @@ gradlew.bat
 .DS_Store
 Thumbs.db
 
+# Moquette embedded broker data
+data/
+
 # Logs
 *.log
 
