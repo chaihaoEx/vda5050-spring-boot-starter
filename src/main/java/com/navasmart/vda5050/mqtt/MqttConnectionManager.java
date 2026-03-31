@@ -16,6 +16,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+/**
+ * MQTT 连接管理器，负责与 Broker 的连接建立、断开及 Topic 订阅。
+ *
+ * <h3>生命周期</h3>
+ * <ul>
+ *   <li>{@link PostConstruct} - 容器启动时自动连接 Broker 并订阅相关 Topic</li>
+ *   <li>{@link PreDestroy} - 容器关闭时优雅断开连接</li>
+ * </ul>
+ *
+ * <h3>LWT（Last Will and Testament）配置</h3>
+ * <p>为 Proxy 模式车辆配置 LWT 消息：当客户端异常断开时，Broker 自动向 connection Topic
+ * 发布 {@code CONNECTIONBROKEN} 状态（QoS 1 + retained），确保主控能感知连接中断。</p>
+ * <p><b>注意：</b>Paho MQTT 客户端仅支持一条 LWT 消息。当存在多辆 Proxy 车辆时，
+ * 仅为第一辆车设置 LWT。生产环境下建议为每辆 Proxy 车辆使用独立的 MqttClient。</p>
+ *
+ * <h3>自动重连</h3>
+ * <p>通过 {@code MqttConnectOptions.setAutomaticReconnect(true)} 启用 Paho 内置的自动重连机制。</p>
+ */
 @Component
 public class MqttConnectionManager {
 
@@ -39,6 +57,21 @@ public class MqttConnectionManager {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 容器启动时连接 MQTT Broker 并订阅相关 Topic。
+     *
+     * <p>执行步骤：
+     * <ol>
+     *   <li>配置连接选项（自动重连、cleanSession、keepAlive、认证信息）</li>
+     *   <li>为 Proxy 车辆设置 LWT 消息</li>
+     *   <li>设置入站消息回调（{@link MqttInboundRouter}）</li>
+     *   <li>建立连接</li>
+     *   <li>根据 Proxy/Server 模式订阅对应 Topic</li>
+     * </ol>
+     * </p>
+     *
+     * @throws MqttException 连接或订阅失败时抛出
+     */
     @PostConstruct
     public void connect() throws MqttException {
         MqttConnectOptions options = new MqttConnectOptions();
@@ -46,13 +79,15 @@ public class MqttConnectionManager {
         options.setCleanSession(properties.getMqtt().isCleanSession());
         options.setKeepAliveInterval(properties.getMqtt().getKeepAlive());
 
+        // 配置认证信息（如果有）
         String username = properties.getMqtt().getUsername();
         if (username != null && !username.isEmpty()) {
             options.setUserName(username);
             options.setPassword(properties.getMqtt().getPassword().toCharArray());
         }
 
-        // Set LWT for proxy vehicles
+        // 为 Proxy 车辆配置 LWT（遗嘱消息）
+        // 当客户端异常断开时，Broker 会自动发布 CONNECTIONBROKEN 状态到 connection Topic
         if (properties.getProxy().isEnabled()) {
             for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
                 try {
@@ -65,9 +100,9 @@ public class MqttConnectionManager {
 
                     String topic = topicResolver.connectionTopic(ctx.getManufacturer(), ctx.getSerialNumber());
                     byte[] payload = objectMapper.writeValueAsBytes(lwt);
+                    // LWT 使用 QoS 1 + retained，确保消息可靠且 Broker 保留最新状态
                     options.setWill(topic, payload, 1, true);
-                    // Note: Paho only supports one LWT; for multi-vehicle, use last one
-                    // In production, consider separate MqttClient per proxy vehicle
+                    // Paho 仅支持单条 LWT，多车辆场景只能设置一辆车的 LWT
                     break;
                 } catch (Exception e) {
                     log.warn("Failed to set LWT for vehicle {}: {}", ctx.getVehicleId(), e.getMessage());
@@ -82,8 +117,16 @@ public class MqttConnectionManager {
         subscribeTopics();
     }
 
+    /**
+     * 根据 Proxy/Server 模式为已注册车辆订阅对应的 MQTT Topic。
+     *
+     * <p>Proxy 模式订阅：order（QoS 0）、instantActions（QoS 0）<br>
+     * Server 模式订阅：state（QoS 0）、connection（QoS 1）、factsheet（QoS 0）</p>
+     *
+     * @throws MqttException 订阅失败时抛出
+     */
     private void subscribeTopics() throws MqttException {
-        // Proxy mode: subscribe to order and instantActions
+        // Proxy 模式：订阅主控下发的 order 和 instantActions
         if (properties.getProxy().isEnabled()) {
             for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
                 String orderTopic = topicResolver.orderTopic(ctx.getManufacturer(), ctx.getSerialNumber());
@@ -94,13 +137,14 @@ public class MqttConnectionManager {
             }
         }
 
-        // Server mode: subscribe to state, connection, factsheet
+        // Server 模式：订阅 AGV 上报的 state、connection 和 factsheet
         if (properties.getServer().isEnabled()) {
             for (VehicleContext ctx : vehicleRegistry.getServerVehicles()) {
                 String stateTopic = topicResolver.stateTopic(ctx.getManufacturer(), ctx.getSerialNumber());
                 String connTopic = topicResolver.connectionTopic(ctx.getManufacturer(), ctx.getSerialNumber());
                 String fsTopic = topicResolver.factsheetTopic(ctx.getManufacturer(), ctx.getSerialNumber());
                 mqttClient.subscribe(stateTopic, 0);
+                // connection Topic 使用 QoS 1，确保可靠接收连接状态变更
                 mqttClient.subscribe(connTopic, 1);
                 mqttClient.subscribe(fsTopic, 0);
                 log.info("Server subscribed: {}, {}, {}", stateTopic, connTopic, fsTopic);
@@ -108,6 +152,9 @@ public class MqttConnectionManager {
         }
     }
 
+    /**
+     * 容器关闭时优雅断开 MQTT 连接。
+     */
     @PreDestroy
     public void disconnect() {
         try {
@@ -120,6 +167,11 @@ public class MqttConnectionManager {
         }
     }
 
+    /**
+     * 检查当前是否已连接到 MQTT Broker。
+     *
+     * @return 已连接返回 true，否则返回 false
+     */
     public boolean isConnected() {
         return mqttClient.isConnected();
     }
