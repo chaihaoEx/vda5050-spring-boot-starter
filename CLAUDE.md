@@ -5,12 +5,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-mvn clean compile          # Build (no tests yet)
-mvn clean compile -q       # Quiet build
-mvn clean compile -Dmaven.compiler.showDeprecation=true  # Show deprecation warnings
+./mvnw clean compile                    # Build
+./mvnw verify                           # Build + test + SpotBugs + Checkstyle + JaCoCo
+./mvnw test -pl . -Dtest=TimestampUtilTest  # Run single test class
+mvn verify --batch-mode --no-transfer-progress  # CI-style (if mvnw download fails in China)
 ```
 
-No tests exist yet. The project uses `spring-boot-starter-test` (JUnit 5) for future tests.
+17 unit tests in `src/test/java/`. JUnit 5 via `spring-boot-starter-test`.
+
+## CI
+
+GitHub Actions workflow at `.github/workflows/ci.yml` — triggers on push/PR to main.
+Runs: compile → test → JaCoCo coverage → SpotBugs analysis → Checkstyle → upload JAR artifact.
+SpotBugs and Checkstyle are non-blocking (report only, don't fail build).
+
+## Gotchas
+
+- `com.navasmart.vda5050.model.Error` conflicts with `java.lang.Error` — use FQN when both in scope
+- Jackson `setSerializationInclusion()` deprecated in Spring Boot 4.x — use `setDefaultPropertyInclusion()`
+- Aliyun Maven mirror may lag behind Maven Central — check available versions before pinning
+- Maven Wrapper may fail to download in China network — fall back to local `mvn`
 
 ## Project Overview
 
