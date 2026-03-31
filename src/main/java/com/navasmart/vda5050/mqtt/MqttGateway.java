@@ -50,6 +50,10 @@ public class MqttGateway {
      * @param retained 是否设置为保留消息
      */
     public void publish(String topic, Object payload, int qos, boolean retained) {
+        if (!mqttClient.isConnected()) {
+            log.debug("MQTT client not connected, skipping publish to {}", topic);
+            return;
+        }
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(payload);
             MqttMessage message = new MqttMessage(bytes);
