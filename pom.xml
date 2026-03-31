@@ -65,6 +65,12 @@
             <artifactId>moquette-broker</artifactId>
             <version>0.17</version>
             <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.bugsnag</groupId>
+                    <artifactId>bugsnag</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
