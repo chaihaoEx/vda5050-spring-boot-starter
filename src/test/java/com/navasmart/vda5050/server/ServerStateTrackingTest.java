@@ -112,13 +112,13 @@ class ServerStateTrackingTest {
 
         @Bean
         public AgvStateTracker agvStateTracker(VehicleRegistry vehicleRegistry) {
-            return new AgvStateTracker(vehicleRegistry, SHARED_ADAPTER);
+            return new AgvStateTracker(vehicleRegistry, SHARED_ADAPTER, event -> {});
         }
 
         @Bean
         public ServerConnectionMonitor serverConnectionMonitor(
                 VehicleRegistry vehicleRegistry, Vda5050Properties properties) {
-            return new ServerConnectionMonitor(vehicleRegistry, properties, SHARED_ADAPTER);
+            return new ServerConnectionMonitor(vehicleRegistry, properties, SHARED_ADAPTER, event -> {});
         }
 
         @Bean

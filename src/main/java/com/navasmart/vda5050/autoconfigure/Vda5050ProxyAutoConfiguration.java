@@ -6,6 +6,7 @@ import com.navasmart.vda5050.mqtt.MqttInboundRouter;
 import com.navasmart.vda5050.proxy.action.ActionHandlerRegistry;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyStateProvider;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyVehicleAdapter;
+import com.navasmart.vda5050.proxy.validation.OrderValidator;
 import com.navasmart.vda5050.proxy.heartbeat.ProxyConnectionPublisher;
 import com.navasmart.vda5050.proxy.heartbeat.ProxyHeartbeatScheduler;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
@@ -14,6 +15,7 @@ import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -49,6 +51,12 @@ public class Vda5050ProxyAutoConfiguration {
         return new ActionHandlerRegistry();
     }
 
+    @Bean
+    @ConditionalOnMissingBean
+    public OrderValidator orderValidator() {
+        return new OrderValidator();
+    }
+
     /**
      * 创建订单状态机，负责接收和处理 VDA5050 订单及即时动作。
      *
@@ -60,8 +68,11 @@ public class Vda5050ProxyAutoConfiguration {
     public ProxyOrderStateMachine proxyOrderStateMachine(ErrorAggregator errorAggregator,
                                                           Vda5050ProxyVehicleAdapter vehicleAdapter,
                                                           Vda5050ProxyStateProvider stateProvider,
-                                                          MqttGateway mqttGateway) {
-        return new ProxyOrderStateMachine(errorAggregator, vehicleAdapter, stateProvider, mqttGateway);
+                                                          MqttGateway mqttGateway,
+                                                          ApplicationEventPublisher eventPublisher,
+                                                          OrderValidator orderValidator) {
+        return new ProxyOrderStateMachine(errorAggregator, vehicleAdapter, stateProvider,
+                mqttGateway, eventPublisher, orderValidator);
     }
 
     /**
@@ -76,9 +87,10 @@ public class Vda5050ProxyAutoConfiguration {
                                                   ErrorAggregator errorAggregator,
                                                   ActionHandlerRegistry actionHandlerRegistry,
                                                   Vda5050ProxyVehicleAdapter vehicleAdapter,
-                                                  Vda5050Properties properties) {
+                                                  Vda5050Properties properties,
+                                                  ApplicationEventPublisher eventPublisher) {
         return new ProxyOrderExecutor(vehicleRegistry, errorAggregator,
-                actionHandlerRegistry, vehicleAdapter, properties);
+                actionHandlerRegistry, vehicleAdapter, properties, eventPublisher);
     }
 
     /**

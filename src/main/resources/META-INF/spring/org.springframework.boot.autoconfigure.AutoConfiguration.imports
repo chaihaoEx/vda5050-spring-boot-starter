@@ -1,3 +1,4 @@
 com.navasmart.vda5050.autoconfigure.Vda5050AutoConfiguration
 com.navasmart.vda5050.autoconfigure.Vda5050ProxyAutoConfiguration
 com.navasmart.vda5050.autoconfigure.Vda5050ServerAutoConfiguration
+com.navasmart.vda5050.autoconfigure.Vda5050ActuatorAutoConfiguration

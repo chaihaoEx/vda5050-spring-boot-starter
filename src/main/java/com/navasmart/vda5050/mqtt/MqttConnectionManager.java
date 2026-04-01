@@ -10,7 +10,7 @@ import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
@@ -19,6 +19,8 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * MQTT 连接管理器，负责与 Broker 的连接建立、断开及 Topic 订阅。
@@ -43,7 +45,8 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <h2>自动重连</h2>
- * <p>所有 client 均通过 {@code MqttConnectOptions.setAutomaticReconnect(true)} 启用 Paho 内置的自动重连机制。</p>
+ * <p>所有 client 均通过 {@code MqttConnectOptions.setAutomaticReconnect(true)} 启用 Paho 内置的自动重连机制。
+ * 重连成功后自动重新订阅 Topic。可通过 {@code vda5050.mqtt.maxReconnectAttempts} 配置最大重连次数。</p>
  */
 @Component
 public class MqttConnectionManager {
@@ -56,6 +59,9 @@ public class MqttConnectionManager {
     private final VehicleRegistry vehicleRegistry;
     private final Vda5050Properties properties;
     private final ObjectMapper objectMapper;
+
+    /** 共享 client 的连续断连计数器（成功重连后重置为 0） */
+    private final AtomicInteger consecutiveDisconnects = new AtomicInteger(0);
 
     public MqttConnectionManager(MqttClient mqttClient, MqttInboundRouter inboundRouter,
                                  MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry,
@@ -70,13 +76,6 @@ public class MqttConnectionManager {
 
     /**
      * 容器启动时连接 MQTT Broker 并订阅相关 Topic。
-     *
-     * <p>执行步骤：
-     * <ol>
-     *   <li>为每辆 Proxy 车辆创建独立 MqttClient，配置各自的 LWT 后连接 Broker</li>
-     *   <li>连接共享 MqttClient（用于 Server 模式及非 Proxy 场景）</li>
-     *   <li>订阅各模式对应的 Topic</li>
-     * </ol>
      *
      * @throws MqttException 连接或订阅失败时抛出
      */
@@ -95,6 +94,35 @@ public class MqttConnectionManager {
             log.info("Shared MQTT client connected to {}:{}",
                     properties.getMqtt().getHost(), properties.getMqtt().getPort());
 
+            // 注册重连监听器：重连后自动重新订阅 Server Topic
+            inboundRouter.addReconnectListener(() -> {
+                consecutiveDisconnects.set(0);
+                try {
+                    if (properties.getServer().isEnabled()) {
+                        subscribeServerTopics(sharedMqttClient);
+                        log.info("Re-subscribed server topics after reconnect");
+                    }
+                } catch (MqttException e) {
+                    log.error("Failed to re-subscribe server topics after reconnect: {}", e.getMessage());
+                }
+            });
+
+            // 注册连接丢失监听器：断路器逻辑
+            int maxAttempts = properties.getMqtt().getMaxReconnectAttempts();
+            if (maxAttempts > 0) {
+                inboundRouter.addConnectionLostListener(() -> {
+                    int count = consecutiveDisconnects.incrementAndGet();
+                    if (count >= maxAttempts) {
+                        log.error("Max reconnect attempts ({}) reached for shared client. Giving up.", maxAttempts);
+                        try {
+                            sharedMqttClient.disconnectForcibly();
+                        } catch (MqttException e) {
+                            log.warn("Error disconnecting after max retries: {}", e.getMessage());
+                        }
+                    }
+                });
+            }
+
             if (properties.getServer().isEnabled()) {
                 subscribeServerTopics(sharedMqttClient);
             }
@@ -103,36 +131,99 @@ public class MqttConnectionManager {
 
     /**
      * 为每辆 Proxy 车辆创建独立的 MqttClient，各自配置 LWT 后连接 Broker。
-     * 创建的 client 存储在对应的 {@link VehicleContext#setProxyMqttClient} 中。
      */
     private void connectProxyVehicles() throws MqttException {
-        Vda5050Properties.MqttConfig mqtt = properties.getMqtt();
-        String protocol = "websocket".equalsIgnoreCase(mqtt.getTransport()) ? "ws" : "tcp";
-        String serverUri = protocol + "://" + mqtt.getHost() + ":" + mqtt.getPort();
-
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
-            String clientId = mqtt.getClientIdPrefix()
-                    + "-" + ctx.getManufacturer()
-                    + "-" + ctx.getSerialNumber()
-                    + "-" + System.currentTimeMillis();
-
-            MqttClient vehicleClient = new MqttClient(serverUri, clientId, new MemoryPersistence());
-
-            MqttConnectOptions vehicleOptions = buildBaseOptions();
-            setLwt(vehicleOptions, ctx);
-
-            vehicleClient.setCallback(new VehicleClientCallback(ctx.getVehicleId(), inboundRouter));
-            vehicleClient.connect(vehicleOptions);
-            ctx.setProxyMqttClient(vehicleClient);
-
-            subscribeProxyTopics(vehicleClient, ctx);
-            log.info("Proxy vehicle {} connected with dedicated MQTT client (id={})",
-                    ctx.getVehicleId(), clientId);
+            connectSingleProxyVehicle(ctx);
         }
     }
 
     /**
-     * 构建基础连接选项（自动重连、cleanSession、keepAlive、认证）。
+     * 为单辆 Proxy 车辆创建独立 MqttClient，配置 LWT，连接 Broker 并订阅 Topic。
+     * 公开方法供动态车辆注册使用。
+     *
+     * @param ctx 车辆上下文
+     * @throws MqttException 连接失败时抛出
+     */
+    public void connectProxyVehicle(VehicleContext ctx) throws MqttException {
+        connectSingleProxyVehicle(ctx);
+    }
+
+    private void connectSingleProxyVehicle(VehicleContext ctx) throws MqttException {
+        Vda5050Properties.MqttConfig mqtt = properties.getMqtt();
+        String serverUri = mqtt.resolveScheme() + "://" + mqtt.getHost() + ":" + mqtt.getPort();
+
+        String clientId = mqtt.getClientIdPrefix()
+                + "-" + ctx.getManufacturer()
+                + "-" + ctx.getSerialNumber()
+                + "-" + System.currentTimeMillis();
+
+        MqttClient vehicleClient = new MqttClient(serverUri, clientId, new MemoryPersistence());
+
+        MqttConnectOptions vehicleOptions = buildBaseOptions();
+        setLwt(vehicleOptions, ctx);
+
+        vehicleClient.setCallback(new VehicleClientCallback(ctx.getVehicleId(), inboundRouter, this, ctx));
+        vehicleClient.connect(vehicleOptions);
+        ctx.setProxyMqttClient(vehicleClient);
+
+        subscribeProxyTopics(vehicleClient, ctx);
+        log.info("Proxy vehicle {} connected with dedicated MQTT client (id={})",
+                ctx.getVehicleId(), clientId);
+    }
+
+    /**
+     * 断开指定 Proxy 车辆的 MQTT 连接。
+     *
+     * @param ctx 车辆上下文
+     */
+    public void disconnectProxyVehicle(VehicleContext ctx) {
+        MqttClient vehicleClient = ctx.getProxyMqttClient();
+        if (vehicleClient != null) {
+            try {
+                if (vehicleClient.isConnected()) {
+                    vehicleClient.disconnect();
+                    log.info("Proxy vehicle {} MQTT client disconnected", ctx.getVehicleId());
+                }
+            } catch (MqttException e) {
+                log.warn("Error disconnecting proxy client for {}: {}", ctx.getVehicleId(), e.getMessage());
+            }
+            ctx.setProxyMqttClient(null);
+        }
+    }
+
+    /**
+     * 在共享 client 上为单辆 Server 模式车辆订阅 state/connection/factsheet Topic。
+     *
+     * @param ctx 车辆上下文
+     * @throws MqttException 订阅失败时抛出
+     */
+    public void subscribeServerVehicle(VehicleContext ctx) throws MqttException {
+        String stateTopic = topicResolver.stateTopic(ctx.getManufacturer(), ctx.getSerialNumber());
+        String connTopic = topicResolver.connectionTopic(ctx.getManufacturer(), ctx.getSerialNumber());
+        String fsTopic = topicResolver.factsheetTopic(ctx.getManufacturer(), ctx.getSerialNumber());
+        sharedMqttClient.subscribe(stateTopic, 0);
+        sharedMqttClient.subscribe(connTopic, 1);
+        sharedMqttClient.subscribe(fsTopic, 0);
+        log.info("Server subscribed for vehicle {}: {}, {}, {}", ctx.getVehicleId(), stateTopic, connTopic, fsTopic);
+    }
+
+    /**
+     * 在共享 client 上取消订阅指定 Server 模式车辆的 Topic。
+     *
+     * @param ctx 车辆上下文
+     * @throws MqttException 取消订阅失败时抛出
+     */
+    public void unsubscribeServerVehicle(VehicleContext ctx) throws MqttException {
+        String stateTopic = topicResolver.stateTopic(ctx.getManufacturer(), ctx.getSerialNumber());
+        String connTopic = topicResolver.connectionTopic(ctx.getManufacturer(), ctx.getSerialNumber());
+        String fsTopic = topicResolver.factsheetTopic(ctx.getManufacturer(), ctx.getSerialNumber());
+        sharedMqttClient.unsubscribe(new String[]{stateTopic, connTopic, fsTopic});
+        log.info("Server unsubscribed for vehicle {}", ctx.getVehicleId());
+    }
+
+    /**
+     * 构建基础连接选项（自动重连、cleanSession、keepAlive、认证、SSL）。
      */
     private MqttConnectOptions buildBaseOptions() {
         MqttConnectOptions options = new MqttConnectOptions();
@@ -145,12 +236,22 @@ public class MqttConnectionManager {
             options.setUserName(username);
             options.setPassword(properties.getMqtt().getPassword().toCharArray());
         }
+
+        // SSL/TLS 配置
+        Vda5050Properties.SslConfig sslConfig = properties.getMqtt().getSsl();
+        if (sslConfig.isEnabled()) {
+            try {
+                options.setSocketFactory(SslUtil.createSocketFactory(sslConfig));
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to configure SSL for MQTT", e);
+            }
+        }
+
         return options;
     }
 
     /**
      * 为指定 Proxy 车辆配置 LWT（遗嘱消息）。
-     * 当 client 异常断开时，Broker 自动发布 CONNECTIONBROKEN 到该车辆的 connection Topic。
      */
     private void setLwt(MqttConnectOptions options, VehicleContext ctx) {
         try {
@@ -172,7 +273,7 @@ public class MqttConnectionManager {
     /**
      * 在指定 client 上为 Proxy 车辆订阅 order 和 instantActions Topic。
      */
-    private void subscribeProxyTopics(MqttClient client, VehicleContext ctx) throws MqttException {
+    void subscribeProxyTopics(MqttClient client, VehicleContext ctx) throws MqttException {
         String orderTopic = topicResolver.orderTopic(ctx.getManufacturer(), ctx.getSerialNumber());
         String actionsTopic = topicResolver.instantActionsTopic(ctx.getManufacturer(), ctx.getSerialNumber());
         client.subscribe(orderTopic, 0);
@@ -200,25 +301,12 @@ public class MqttConnectionManager {
      */
     @PreDestroy
     public void disconnect() {
-        // 断开所有 Proxy 车辆的专属 client
         if (properties.getProxy().isEnabled()) {
             for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
-                MqttClient vehicleClient = ctx.getProxyMqttClient();
-                if (vehicleClient != null) {
-                    try {
-                        if (vehicleClient.isConnected()) {
-                            vehicleClient.disconnect();
-                            log.info("Proxy vehicle {} MQTT client disconnected", ctx.getVehicleId());
-                        }
-                    } catch (MqttException e) {
-                        log.warn("Error disconnecting proxy client for {}: {}",
-                                ctx.getVehicleId(), e.getMessage());
-                    }
-                }
+                disconnectProxyVehicle(ctx);
             }
         }
 
-        // 断开共享 client
         try {
             if (sharedMqttClient.isConnected()) {
                 sharedMqttClient.disconnect();
@@ -231,30 +319,68 @@ public class MqttConnectionManager {
 
     /**
      * 检查共享 MQTT client 是否已连接到 Broker。
-     *
-     * @return 已连接返回 true，否则返回 false
      */
     public boolean isConnected() {
         return sharedMqttClient.isConnected();
     }
 
     /**
-     * Per-vehicle client 的轻量 callback：消息转发到共享 InboundRouter，
-     * connectionLost 独立记录日志，不触发共享 router 的 connectionLostListeners。
+     * Per-vehicle client 的回调：消息转发到共享 InboundRouter，
+     * 重连后自动重新订阅 Proxy Topic，断连时执行断路器逻辑。
      */
-    private static class VehicleClientCallback implements MqttCallback {
+    private static class VehicleClientCallback implements MqttCallbackExtended {
 
         private final String vehicleId;
         private final MqttInboundRouter inboundRouter;
+        private final MqttConnectionManager connectionManager;
+        private final VehicleContext vehicleContext;
+        private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
 
-        VehicleClientCallback(String vehicleId, MqttInboundRouter inboundRouter) {
+        VehicleClientCallback(String vehicleId, MqttInboundRouter inboundRouter,
+                              MqttConnectionManager connectionManager, VehicleContext vehicleContext) {
             this.vehicleId = vehicleId;
             this.inboundRouter = inboundRouter;
+            this.connectionManager = connectionManager;
+            this.vehicleContext = vehicleContext;
+        }
+
+        @Override
+        public void connectComplete(boolean reconnect, String serverURI) {
+            if (reconnect) {
+                reconnectAttempts.set(0);
+                log.info("Proxy vehicle {} reconnected to {}", vehicleId, serverURI);
+                MqttClient client = vehicleContext.getProxyMqttClient();
+                if (client != null) {
+                    try {
+                        connectionManager.subscribeProxyTopics(client, vehicleContext);
+                        log.info("Re-subscribed proxy topics for vehicle {} after reconnect", vehicleId);
+                    } catch (MqttException e) {
+                        log.error("Failed to re-subscribe proxy topics for {}: {}", vehicleId, e.getMessage());
+                    }
+                }
+            }
         }
 
         @Override
         public void connectionLost(Throwable cause) {
             log.warn("Proxy vehicle {} MQTT connection lost: {}", vehicleId, cause.getMessage());
+            int maxAttempts = connectionManager.properties.getMqtt().getMaxReconnectAttempts();
+            if (maxAttempts > 0) {
+                int attempts = reconnectAttempts.incrementAndGet();
+                if (attempts >= maxAttempts) {
+                    log.error("Max reconnect attempts ({}) reached for vehicle {}. Giving up.",
+                            maxAttempts, vehicleId);
+                    MqttClient client = vehicleContext.getProxyMqttClient();
+                    if (client != null) {
+                        try {
+                            client.disconnectForcibly();
+                        } catch (MqttException e) {
+                            log.warn("Error disconnecting vehicle {} after max retries: {}",
+                                    vehicleId, e.getMessage());
+                        }
+                    }
+                }
+            }
         }
 
         @Override

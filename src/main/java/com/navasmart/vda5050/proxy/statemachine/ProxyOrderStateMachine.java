@@ -15,9 +15,12 @@ import com.navasmart.vda5050.model.enums.ActionStatus;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyStateProvider;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyVehicleAdapter;
+import com.navasmart.vda5050.proxy.validation.OrderValidator;
+import com.navasmart.vda5050.event.OrderReceivedEvent;
 import com.navasmart.vda5050.vehicle.VehicleContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -56,15 +59,21 @@ public class ProxyOrderStateMachine {
     private final Vda5050ProxyVehicleAdapter vehicleAdapter;
     private final Vda5050ProxyStateProvider stateProvider;
     private final MqttGateway mqttGateway;
+    private final ApplicationEventPublisher eventPublisher;
+    private final OrderValidator orderValidator;
 
     public ProxyOrderStateMachine(ErrorAggregator errorAggregator,
                                   Vda5050ProxyVehicleAdapter vehicleAdapter,
                                   Vda5050ProxyStateProvider stateProvider,
-                                  MqttGateway mqttGateway) {
+                                  MqttGateway mqttGateway,
+                                  ApplicationEventPublisher eventPublisher,
+                                  OrderValidator orderValidator) {
         this.errorAggregator = errorAggregator;
         this.vehicleAdapter = vehicleAdapter;
         this.stateProvider = stateProvider;
         this.mqttGateway = mqttGateway;
+        this.eventPublisher = eventPublisher;
+        this.orderValidator = orderValidator;
     }
 
     /**
@@ -77,15 +86,43 @@ public class ProxyOrderStateMachine {
      * @param order 收到的订单消息
      */
     public void receiveOrder(VehicleContext ctx, Order order) {
+        boolean accepted = false;
+        String vehicleId;
+
         ctx.lock();
         try {
+            vehicleId = ctx.getVehicleId();
+
+            // 入站校验：结构和序列一致性
+            List<String> validationErrors = orderValidator.validate(order);
+            if (!validationErrors.isEmpty()) {
+                for (String error : validationErrors) {
+                    errorAggregator.addWarning(ctx, error, "validationError",
+                            Map.of("orderId", String.valueOf(order.getOrderId())));
+                }
+                log.warn("Vehicle {} rejected order due to validation errors: {}",
+                        vehicleId, validationErrors);
+                return;
+            }
+
+            // 订单更新时的 orderUpdateId 单调递增校验
+            List<String> updateErrors = orderValidator.validateUpdate(order, ctx.getCurrentOrder());
+            if (!updateErrors.isEmpty()) {
+                for (String error : updateErrors) {
+                    errorAggregator.addWarning(ctx, error, "validationError",
+                            Map.of("orderId", order.getOrderId()));
+                }
+                log.warn("Vehicle {} rejected order update: {}", vehicleId, updateErrors);
+                return;
+            }
+
             if (!canAcceptOrder(ctx, order)) {
                 errorAggregator.addWarning(ctx, "Cannot accept order in current state",
                         "orderUpdateError", Map.of("orderId", order.getOrderId()));
                 return;
             }
 
-            log.info("Vehicle {} accepting order: {}", ctx.getVehicleId(), order.getOrderId());
+            log.info("Vehicle {} accepting order: {}", vehicleId, order.getOrderId());
 
             ctx.setCurrentOrder(order);
             ctx.setCurrentNodeIndex(0);
@@ -93,8 +130,15 @@ public class ProxyOrderStateMachine {
             ctx.setReachedWaypoint(true);
             initAgvState(ctx, order);
             ctx.setClientState(ProxyClientState.RUNNING);
+            accepted = true;
         } finally {
             ctx.unlock();
+        }
+
+        // 事件在锁外发布，避免死锁
+        if (accepted) {
+            eventPublisher.publishEvent(new OrderReceivedEvent(
+                    this, vehicleId, order.getOrderId(), order.getOrderUpdateId()));
         }
     }
 

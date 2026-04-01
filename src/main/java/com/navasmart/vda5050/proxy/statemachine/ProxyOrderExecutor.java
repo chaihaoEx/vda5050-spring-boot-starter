@@ -18,10 +18,15 @@ import com.navasmart.vda5050.vehicle.VehicleContext;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import com.navasmart.vda5050.event.OrderCompletedEvent;
+import com.navasmart.vda5050.event.OrderFailedEvent;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -63,17 +68,22 @@ public class ProxyOrderExecutor {
     private final ActionHandlerRegistry actionHandlerRegistry;
     private final Vda5050ProxyVehicleAdapter vehicleAdapter;
     private final Vda5050Properties properties;
+    private final ApplicationEventPublisher eventPublisher;
+
+    private volatile boolean shuttingDown = false;
 
     public ProxyOrderExecutor(VehicleRegistry vehicleRegistry,
                               ErrorAggregator errorAggregator,
                               ActionHandlerRegistry actionHandlerRegistry,
                               Vda5050ProxyVehicleAdapter vehicleAdapter,
-                              Vda5050Properties properties) {
+                              Vda5050Properties properties,
+                              ApplicationEventPublisher eventPublisher) {
         this.vehicleRegistry = vehicleRegistry;
         this.errorAggregator = errorAggregator;
         this.actionHandlerRegistry = actionHandlerRegistry;
         this.vehicleAdapter = vehicleAdapter;
         this.properties = properties;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -83,9 +93,37 @@ public class ProxyOrderExecutor {
      */
     @Scheduled(fixedDelayString = "${vda5050.proxy.orderLoopIntervalMs:200}")
     public void execute() {
+        if (shuttingDown) {
+            return;
+        }
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
             executeForVehicle(ctx);
         }
+    }
+
+    /**
+     * 通知执行器进入关闭流程，停止接受新的执行循环。
+     */
+    public void shutdown() {
+        this.shuttingDown = true;
+        log.info("ProxyOrderExecutor shutdown initiated");
+    }
+
+    /**
+     * 检查所有 Proxy 车辆是否都处于 IDLE 状态（无进行中的工作）。
+     */
+    public boolean isIdle() {
+        for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
+            ctx.lock();
+            try {
+                if (ctx.getClientState() != ProxyClientState.IDLE) {
+                    return false;
+                }
+            } finally {
+                ctx.unlock();
+            }
+        }
+        return true;
     }
 
     /**
@@ -93,6 +131,8 @@ public class ProxyOrderExecutor {
      * 流程：检查错误 -> 处理当前节点动作 -> 推进到下一节点。
      */
     private void executeForVehicle(VehicleContext ctx) {
+        OrderCompletionInfo completionInfo = null;
+
         ctx.lock();
         try {
             // 只处理 RUNNING 状态的车辆，IDLE 和 PAUSED 跳过
@@ -108,6 +148,7 @@ public class ProxyOrderExecutor {
             // 第一步：检查是否存在 FATAL 错误，如有则中止订单并取消导航
             if (errorAggregator.hasFatalError(ctx)) {
                 handleFatalError(ctx);
+                completionInfo = new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), true);
                 return;
             }
 
@@ -120,6 +161,7 @@ public class ProxyOrderExecutor {
                             ctx.getVehicleId(), timeout);
                     errorAggregator.addFatalError(ctx, "Navigation timeout", "navigationTimeout");
                     handleFatalError(ctx);
+                    completionInfo = new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), true);
                 }
                 return;
             }
@@ -134,6 +176,7 @@ public class ProxyOrderExecutor {
                     log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
                     ctx.setClientState(ProxyClientState.IDLE);
                     ctx.getAgvState().setDriving(false);
+                    completionInfo = new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), false);
                 }
                 return;
             }
@@ -144,11 +187,22 @@ public class ProxyOrderExecutor {
 
             if (result == NodeProcessResult.ALL_ACTIONS_DONE) {
                 // 当前节点所有动作完成，推进到下一节点并发起导航
-                advanceToNextNode(ctx);
+                completionInfo = advanceToNextNode(ctx);
             }
             // 如果 result == WAITING，说明还有动作在执行中，等下一轮循环再检查
         } finally {
             ctx.unlock();
+        }
+
+        // 事件在锁外发布
+        if (completionInfo != null) {
+            if (completionInfo.failed) {
+                eventPublisher.publishEvent(new OrderFailedEvent(
+                        this, completionInfo.vehicleId, completionInfo.orderId, Collections.emptyList()));
+            } else {
+                eventPublisher.publishEvent(new OrderCompletedEvent(
+                        this, completionInfo.vehicleId, completionInfo.orderId));
+            }
         }
     }
 
@@ -314,7 +368,7 @@ public class ProxyOrderExecutor {
      * 推进到下一个节点：更新 nodeStates/edgeStates，设置 lastNodeId，然后发起异步导航。
      * 导航结果通过 CompletableFuture 回调处理：成功则标记到达，失败则记录 FATAL 错误。
      */
-    private void advanceToNextNode(VehicleContext ctx) {
+    private OrderCompletionInfo advanceToNextNode(VehicleContext ctx) {
         Order order = ctx.getCurrentOrder();
 
         List<Node> nodeList = order.getNodes();
@@ -324,7 +378,7 @@ public class ProxyOrderExecutor {
                     nodeList == null ? "null" : nodeList.size());
             ctx.setClientState(ProxyClientState.IDLE);
             ctx.getAgvState().setDriving(false);
-            return;
+            return null;
         }
 
         int oldNodeIndex = ctx.getCurrentNodeIndex();
@@ -354,8 +408,9 @@ public class ProxyOrderExecutor {
                 ctx.setClientState(ProxyClientState.IDLE);
                 ctx.getAgvState().setDriving(false);
                 log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
+                return new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), false);
             }
-            return;
+            return null;
         }
 
         // 发起异步导航到下一个节点，记录导航开始时间用于超时检测
@@ -418,7 +473,11 @@ public class ProxyOrderExecutor {
                 ctx.unlock();
             }
         });
+        return null;
     }
+
+    /** 订单完成信息，用于在锁外发布事件 */
+    private record OrderCompletionInfo(String vehicleId, String orderId, boolean failed) {}
 
     private void handleFatalError(VehicleContext ctx) {
         log.error("Vehicle {} has fatal error, aborting order", ctx.getVehicleId());

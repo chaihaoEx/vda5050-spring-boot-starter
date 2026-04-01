@@ -10,9 +10,11 @@ import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.mqtt.MqttInboundRouter;
 import com.navasmart.vda5050.mqtt.MqttTopicResolver;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -70,8 +72,7 @@ public class Vda5050AutoConfiguration {
     @ConditionalOnMissingBean
     public MqttClient mqttClient(Vda5050Properties properties) throws MqttException {
         Vda5050Properties.MqttConfig mqtt = properties.getMqtt();
-        String protocol = "websocket".equalsIgnoreCase(mqtt.getTransport()) ? "ws" : "tcp";
-        String serverUri = protocol + "://" + mqtt.getHost() + ":" + mqtt.getPort();
+        String serverUri = mqtt.resolveScheme() + "://" + mqtt.getHost() + ":" + mqtt.getPort();
         String clientId = mqtt.getClientIdPrefix() + "-" + System.currentTimeMillis();
         return new MqttClient(serverUri, clientId, new MemoryPersistence());
     }
@@ -99,8 +100,11 @@ public class Vda5050AutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public MqttGateway mqttGateway(MqttClient mqttClient, ObjectMapper vda5050ObjectMapper,
-                                    MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry) {
-        return new MqttGateway(mqttClient, vda5050ObjectMapper, topicResolver, vehicleRegistry);
+                                    MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry,
+                                    Vda5050Properties properties,
+                                    ObjectProvider<MeterRegistry> meterRegistryProvider) {
+        return new MqttGateway(mqttClient, vda5050ObjectMapper, topicResolver, vehicleRegistry,
+                properties, meterRegistryProvider);
     }
 
     /**

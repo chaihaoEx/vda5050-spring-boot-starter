@@ -138,16 +138,18 @@ class ProxyActionHandlerTest {
         @Bean
         public ProxyOrderStateMachine proxyOrderStateMachine(ErrorAggregator errorAggregator,
                                                               MqttGateway mqttGateway) {
-            return new ProxyOrderStateMachine(errorAggregator, SHARED_ADAPTER, SHARED_ADAPTER, mqttGateway);
+            return new ProxyOrderStateMachine(errorAggregator, SHARED_ADAPTER, SHARED_ADAPTER, mqttGateway,
+                    event -> {}, new com.navasmart.vda5050.proxy.validation.OrderValidator());
         }
 
         @Bean
         public ProxyOrderExecutor proxyOrderExecutor(VehicleRegistry vehicleRegistry,
                                                       ErrorAggregator errorAggregator,
                                                       ActionHandlerRegistry actionHandlerRegistry,
-                                                      Vda5050Properties properties) {
+                                                      Vda5050Properties properties,
+                                                      org.springframework.context.ApplicationEventPublisher eventPublisher) {
             return new ProxyOrderExecutor(vehicleRegistry, errorAggregator, actionHandlerRegistry,
-                    SHARED_ADAPTER, properties);
+                    SHARED_ADAPTER, properties, eventPublisher);
         }
 
         @Bean
