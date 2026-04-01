@@ -157,7 +157,9 @@ public class ProxyHeartbeatScheduler {
         copy.setEdgeStates(new ArrayList<>(src.getEdgeStates()));
         copy.setAgvPosition(src.getAgvPosition());
         copy.setVelocity(src.getVelocity());
-        copy.setLoads(src.getLoads() != null ? new ArrayList<>(src.getLoads()) : null);
+        if (src.getLoads() != null) {
+            copy.setLoads(new ArrayList<>(src.getLoads()));
+        }
         copy.setDriving(src.isDriving());
         copy.setPaused(src.isPaused());
         copy.setNewBaseRequested(src.isNewBaseRequested());

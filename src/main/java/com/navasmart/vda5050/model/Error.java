@@ -73,11 +73,13 @@ public class Error {
         if (this == o) { return true; }
         if (o == null || getClass() != o.getClass()) { return false; }
         Error that = (Error) o;
-        return Objects.equals(errorType, that.errorType) && Objects.equals(errorDescription, that.errorDescription);
+        return Objects.equals(errorType, that.errorType)
+                && Objects.equals(errorDescription, that.errorDescription)
+                && Objects.equals(errorLevel, that.errorLevel);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(errorType, errorDescription);
+        return Objects.hash(errorType, errorDescription, errorLevel);
     }
 }

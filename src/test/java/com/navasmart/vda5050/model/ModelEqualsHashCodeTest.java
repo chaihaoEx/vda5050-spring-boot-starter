@@ -40,6 +40,28 @@ class ModelEqualsHashCodeTest {
     }
 
     @Test
+    void order_sameOrderId_differentUpdateId() {
+        Order a = new Order();
+        a.setOrderId("O1");
+        a.setOrderUpdateId(1L);
+        Order b = new Order();
+        b.setOrderId("O1");
+        b.setOrderUpdateId(2L);
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
+    void order_differentOrderId_sameUpdateId() {
+        Order a = new Order();
+        a.setOrderId("O1");
+        a.setOrderUpdateId(1L);
+        Order b = new Order();
+        b.setOrderId("O2");
+        b.setOrderUpdateId(1L);
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
     void order_hashCodeConsistency() {
         Order a = new Order();
         a.setOrderId("O1");
@@ -92,6 +114,28 @@ class ModelEqualsHashCodeTest {
     }
 
     @Test
+    void node_sameId_differentSequence() {
+        Node a = new Node();
+        a.setNodeId("N1");
+        a.setSequenceId(1);
+        Node b = new Node();
+        b.setNodeId("N1");
+        b.setSequenceId(2);
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
+    void node_differentId_sameSequence() {
+        Node a = new Node();
+        a.setNodeId("N1");
+        a.setSequenceId(1);
+        Node b = new Node();
+        b.setNodeId("N2");
+        b.setSequenceId(1);
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
     void node_hashCodeConsistency() {
         Node a = new Node();
         a.setNodeId("N1");
@@ -141,6 +185,28 @@ class ModelEqualsHashCodeTest {
         c.setEdgeId("E2");
         c.setSequenceId(2);
         assertThat(a).isNotEqualTo(c);
+    }
+
+    @Test
+    void edge_sameId_differentSequence() {
+        Edge a = new Edge();
+        a.setEdgeId("E1");
+        a.setSequenceId(1);
+        Edge b = new Edge();
+        b.setEdgeId("E1");
+        b.setSequenceId(2);
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
+    void edge_differentId_sameSequence() {
+        Edge a = new Edge();
+        a.setEdgeId("E1");
+        a.setSequenceId(1);
+        Edge b = new Edge();
+        b.setEdgeId("E2");
+        b.setSequenceId(1);
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
@@ -284,6 +350,17 @@ class ModelEqualsHashCodeTest {
     }
 
     @Test
+    void nodeState_sameId_differentSequence() {
+        NodeState a = new NodeState();
+        a.setNodeId("NS1");
+        a.setSequenceId(1);
+        NodeState b = new NodeState();
+        b.setNodeId("NS1");
+        b.setSequenceId(2);
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
     void nodeState_hashCodeConsistency() {
         NodeState a = new NodeState();
         a.setNodeId("NS1");
@@ -336,6 +413,17 @@ class ModelEqualsHashCodeTest {
     }
 
     @Test
+    void edgeState_sameId_differentSequence() {
+        EdgeState a = new EdgeState();
+        a.setEdgeId("ES1");
+        a.setSequenceId(1);
+        EdgeState b = new EdgeState();
+        b.setEdgeId("ES1");
+        b.setSequenceId(2);
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
     void edgeState_hashCodeConsistency() {
         EdgeState a = new EdgeState();
         a.setEdgeId("ES1");
@@ -361,6 +449,7 @@ class ModelEqualsHashCodeTest {
         com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
+        a.setErrorLevel("WARNING");
         assertThat(a).isEqualTo(a);
     }
 
@@ -369,9 +458,11 @@ class ModelEqualsHashCodeTest {
         com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
+        a.setErrorLevel("WARNING");
         com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
         b.setErrorType("ET");
         b.setErrorDescription("ED");
+        b.setErrorLevel("WARNING");
         assertThat(a).isEqualTo(b);
         assertThat(b).isEqualTo(a);
     }
@@ -381,10 +472,38 @@ class ModelEqualsHashCodeTest {
         com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
+        a.setErrorLevel("WARNING");
         com.navasmart.vda5050.model.Error c = new com.navasmart.vda5050.model.Error();
         c.setErrorType("ET2");
         c.setErrorDescription("ED2");
+        c.setErrorLevel("FATAL");
         assertThat(a).isNotEqualTo(c);
+    }
+
+    @Test
+    void error_sameTypeAndDesc_differentLevel() {
+        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        a.setErrorType("ET");
+        a.setErrorDescription("ED");
+        a.setErrorLevel("WARNING");
+        com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
+        b.setErrorType("ET");
+        b.setErrorDescription("ED");
+        b.setErrorLevel("FATAL");
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
+    void error_sameTypeAndLevel_differentDesc() {
+        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        a.setErrorType("ET");
+        a.setErrorDescription("ED1");
+        a.setErrorLevel("WARNING");
+        com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
+        b.setErrorType("ET");
+        b.setErrorDescription("ED2");
+        b.setErrorLevel("WARNING");
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
@@ -392,9 +511,11 @@ class ModelEqualsHashCodeTest {
         com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
+        a.setErrorLevel("WARNING");
         com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
         b.setErrorType("ET");
         b.setErrorDescription("ED");
+        b.setErrorLevel("WARNING");
         assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
@@ -403,6 +524,7 @@ class ModelEqualsHashCodeTest {
         com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
+        a.setErrorLevel("WARNING");
         assertThat(a).isNotEqualTo(null);
     }
 
@@ -484,6 +606,17 @@ class ModelEqualsHashCodeTest {
     }
 
     @Test
+    void errorReference_sameKey_differentValue() {
+        ErrorReference a = new ErrorReference();
+        a.setReferenceKey("RK");
+        a.setReferenceValue("RV1");
+        ErrorReference b = new ErrorReference();
+        b.setReferenceKey("RK");
+        b.setReferenceValue("RV2");
+        assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
     void errorReference_hashCodeConsistency() {
         ErrorReference a = new ErrorReference();
         a.setReferenceKey("RK");
@@ -533,6 +666,17 @@ class ModelEqualsHashCodeTest {
         c.setReferenceKey("RK2");
         c.setReferenceValue("RV2");
         assertThat(a).isNotEqualTo(c);
+    }
+
+    @Test
+    void infoReference_sameKey_differentValue() {
+        InfoReference a = new InfoReference();
+        a.setReferenceKey("RK");
+        a.setReferenceValue("RV1");
+        InfoReference b = new InfoReference();
+        b.setReferenceKey("RK");
+        b.setReferenceValue("RV2");
+        assertThat(a).isNotEqualTo(b);
     }
 
     @Test
