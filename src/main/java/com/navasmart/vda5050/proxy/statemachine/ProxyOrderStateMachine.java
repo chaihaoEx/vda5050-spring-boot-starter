@@ -187,10 +187,20 @@ public class ProxyOrderStateMachine {
         }
         agvState.setEdgeStates(edgeStates);
 
-        // Initialize action states (all WAITING)
+        // Initialize action states (all WAITING) — node actions first, then edge actions
         List<ActionState> actionStates = new ArrayList<>();
         for (Node node : order.getNodes()) {
             for (Action action : node.getActions()) {
+                ActionState as = new ActionState();
+                as.setActionId(action.getActionId());
+                as.setActionType(action.getActionType());
+                as.setActionDescription(action.getActionDescription());
+                as.setActionStatus(ActionStatus.WAITING.getValue());
+                actionStates.add(as);
+            }
+        }
+        for (Edge edge : order.getEdges()) {
+            for (Action action : edge.getActions()) {
                 ActionState as = new ActionState();
                 as.setActionId(action.getActionId());
                 as.setActionType(action.getActionType());

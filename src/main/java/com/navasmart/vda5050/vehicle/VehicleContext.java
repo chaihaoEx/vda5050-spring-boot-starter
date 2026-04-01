@@ -3,7 +3,10 @@ package com.navasmart.vda5050.vehicle;
 import com.navasmart.vda5050.model.AgvState;
 import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.proxy.statemachine.ProxyClientState;
+import org.eclipse.paho.client.mqttv3.MqttClient;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -76,6 +79,18 @@ public class VehicleContext {
 
     /** 是否已到达当前航点 */
     private boolean reachedWaypoint;
+
+    /** 当前导航开始时间（epoch 毫秒），0 表示未导航或导航已完成 */
+    private long navigationStartTime;
+
+    /** actionId → 动作开始时间（epoch 毫秒），需持锁访问 */
+    private final Map<String, Long> actionStartTimes = new HashMap<>();
+
+    /**
+     * Proxy 模式专属 MQTT 客户端（每辆 Proxy 车辆独立），支持独立 LWT。
+     * 非 Proxy 模式车辆此字段为 null。
+     */
+    private MqttClient proxyMqttClient;
 
     // ============ Server 模式状态（需持锁访问） ============
 
@@ -185,6 +200,14 @@ public class VehicleContext {
 
     public boolean isReachedWaypoint() { return reachedWaypoint; }
     public void setReachedWaypoint(boolean reachedWaypoint) { this.reachedWaypoint = reachedWaypoint; }
+
+    public long getNavigationStartTime() { return navigationStartTime; }
+    public void setNavigationStartTime(long navigationStartTime) { this.navigationStartTime = navigationStartTime; }
+
+    public Map<String, Long> getActionStartTimes() { return actionStartTimes; }
+
+    public MqttClient getProxyMqttClient() { return proxyMqttClient; }
+    public void setProxyMqttClient(MqttClient proxyMqttClient) { this.proxyMqttClient = proxyMqttClient; }
 
     // Server state
     public AgvState getLastReceivedState() { return lastReceivedState; }
