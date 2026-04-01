@@ -17,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+
 /**
  * Proxy 模式下的心跳发布调度器，按固定间隔周期性发布 VDA5050 State 消息。
  *
@@ -63,15 +65,22 @@ public class ProxyHeartbeatScheduler {
     public void publishHeartbeat() {
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
             try {
-                updateStateFromProvider(ctx);
-                AgvState agvState = ctx.getAgvState();
-                agvState.setHeaderId(ctx.nextStateHeaderId());
-                agvState.setTimestamp(TimestampUtil.now());
-                agvState.setVersion(properties.getMqtt().getProtocolVersion());
-                agvState.setManufacturer(ctx.getManufacturer());
-                agvState.setSerialNumber(ctx.getSerialNumber());
+                AgvState snapshot;
+                ctx.lock();
+                try {
+                    updateStateFromProvider(ctx);
+                    AgvState agvState = ctx.getAgvState();
+                    agvState.setHeaderId(ctx.nextStateHeaderId());
+                    agvState.setTimestamp(TimestampUtil.now());
+                    agvState.setVersion(properties.getMqtt().getProtocolVersion());
+                    agvState.setManufacturer(ctx.getManufacturer());
+                    agvState.setSerialNumber(ctx.getSerialNumber());
+                    snapshot = copyAgvState(agvState);
+                } finally {
+                    ctx.unlock();
+                }
 
-                mqttGateway.publishState(ctx.getManufacturer(), ctx.getSerialNumber(), agvState);
+                mqttGateway.publishState(ctx.getManufacturer(), ctx.getSerialNumber(), snapshot);
             } catch (Exception e) {
                 log.error("Failed to publish heartbeat for vehicle {}: {}",
                         ctx.getVehicleId(), e.getMessage(), e);
@@ -130,6 +139,36 @@ public class ProxyHeartbeatScheduler {
             agvState.getErrors().removeIf(e -> !isProtocolError(e));
             agvState.getErrors().addAll(status.getErrors());
         }
+    }
+
+    private AgvState copyAgvState(AgvState src) {
+        AgvState copy = new AgvState();
+        copy.setHeaderId(src.getHeaderId());
+        copy.setTimestamp(src.getTimestamp());
+        copy.setVersion(src.getVersion());
+        copy.setManufacturer(src.getManufacturer());
+        copy.setSerialNumber(src.getSerialNumber());
+        copy.setOrderId(src.getOrderId());
+        copy.setOrderUpdateId(src.getOrderUpdateId());
+        copy.setZoneSetId(src.getZoneSetId());
+        copy.setLastNodeId(src.getLastNodeId());
+        copy.setLastNodeSequenceId(src.getLastNodeSequenceId());
+        copy.setNodeStates(new ArrayList<>(src.getNodeStates()));
+        copy.setEdgeStates(new ArrayList<>(src.getEdgeStates()));
+        copy.setAgvPosition(src.getAgvPosition());
+        copy.setVelocity(src.getVelocity());
+        copy.setLoads(src.getLoads() != null ? new ArrayList<>(src.getLoads()) : null);
+        copy.setDriving(src.isDriving());
+        copy.setPaused(src.isPaused());
+        copy.setNewBaseRequested(src.isNewBaseRequested());
+        copy.setDistanceSinceLastNode(src.getDistanceSinceLastNode());
+        copy.setActionStates(new ArrayList<>(src.getActionStates()));
+        copy.setBatteryState(src.getBatteryState());
+        copy.setOperatingMode(src.getOperatingMode());
+        copy.setErrors(new ArrayList<>(src.getErrors()));
+        copy.setInformations(new ArrayList<>(src.getInformations()));
+        copy.setSafetyState(src.getSafetyState());
+        return copy;
     }
 
     private boolean isProtocolError(com.navasmart.vda5050.model.Error error) {

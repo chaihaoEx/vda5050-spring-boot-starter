@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Proxy 模式下的订单执行器，以固定间隔（默认 200ms）轮询执行当前订单。
@@ -249,7 +250,7 @@ public class ProxyOrderExecutor {
                             ctx.getVehicleId(), action.getActionId(), actionTimeout);
                     actionState.setActionStatus(ActionStatus.FAILED.getValue());
                     actionState.setResultDescription("Action timeout");
-                    ctx.getActionStartTimes().remove(action.getActionId());
+                    ctx.removeActionStartTime(action.getActionId());
                     vehicleAdapter.onActionCancel(ctx.getVehicleId(), action.getActionId());
                     // 超时后 action 变为 FAILED，下一轮循环继续推进
                     continue;
@@ -313,7 +314,7 @@ public class ProxyOrderExecutor {
      */
     private void startAction(VehicleContext ctx, Action action, ActionState actionState) {
         actionState.setActionStatus(ActionStatus.RUNNING.getValue());
-        ctx.getActionStartTimes().put(action.getActionId(), System.currentTimeMillis());
+        ctx.putActionStartTime(action.getActionId(), System.currentTimeMillis());
         log.debug("Vehicle {} starting action {} ({})", ctx.getVehicleId(),
                 action.getActionId(), action.getActionType());
 
@@ -331,9 +332,20 @@ public class ProxyOrderExecutor {
         String actionId = action.getActionId();
         String vehicleId = ctx.getVehicleId();
         future.whenComplete((result, ex) -> {
-            ctx.lock();
             try {
-                ctx.getActionStartTimes().remove(actionId);
+                if (!ctx.tryLock(5, TimeUnit.SECONDS)) {
+                    log.error("Vehicle {} action {} callback failed to acquire lock within 5s",
+                            vehicleId, actionId);
+                    return;
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.error("Vehicle {} action {} callback interrupted while acquiring lock",
+                        vehicleId, actionId);
+                return;
+            }
+            try {
+                ctx.removeActionStartTime(actionId);
                 ActionState as = findActionState(ctx, actionId);
                 if (as == null) {
                     return;
@@ -454,7 +466,18 @@ public class ProxyOrderExecutor {
                 vehicleAdapter.onNavigate(vehicleId, targetNode, waypoints, edges);
 
         navFuture.whenComplete((result, ex) -> {
-            ctx.lock();
+            try {
+                if (!ctx.tryLock(5, TimeUnit.SECONDS)) {
+                    log.error("Vehicle {} navigation callback failed to acquire lock within 5s",
+                            vehicleId);
+                    return;
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.error("Vehicle {} navigation callback interrupted while acquiring lock",
+                        vehicleId);
+                return;
+            }
             try {
                 ctx.setNavigationStartTime(0);
                 if (ex != null) {
@@ -485,7 +508,7 @@ public class ProxyOrderExecutor {
         ctx.setClientState(ProxyClientState.IDLE);
         ctx.getAgvState().setDriving(false);
         ctx.setNavigationStartTime(0);
-        ctx.getActionStartTimes().clear();
+        ctx.clearActionStartTimes();
     }
 
     /**
