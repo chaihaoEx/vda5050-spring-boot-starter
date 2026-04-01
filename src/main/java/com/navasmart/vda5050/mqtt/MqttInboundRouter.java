@@ -15,8 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
 /**
@@ -60,11 +60,11 @@ public class MqttInboundRouter implements MqttCallbackExtended {
     /** Server 模式处理器：接收 AGV 上报的 Factsheet */
     private BiConsumer<VehicleContext, Factsheet> factsheetHandler;
 
-    /** 连接丢失监听器列表 */
-    private final List<Runnable> connectionLostListeners = new ArrayList<>();
+    /** 连接丢失监听器列表（线程安全） */
+    private final List<Runnable> connectionLostListeners = new CopyOnWriteArrayList<>();
 
-    /** 重连成功监听器列表 */
-    private final List<Runnable> reconnectListeners = new ArrayList<>();
+    /** 重连成功监听器列表（线程安全） */
+    private final List<Runnable> reconnectListeners = new CopyOnWriteArrayList<>();
 
     public MqttInboundRouter(ObjectMapper objectMapper, MqttTopicResolver topicResolver,
                              VehicleRegistry vehicleRegistry) {

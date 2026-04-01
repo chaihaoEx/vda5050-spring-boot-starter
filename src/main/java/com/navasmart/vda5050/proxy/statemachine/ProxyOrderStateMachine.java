@@ -86,8 +86,13 @@ public class ProxyOrderStateMachine {
      * @param order 收到的订单消息
      */
     public void receiveOrder(VehicleContext ctx, Order order) {
+        boolean accepted = false;
+        String vehicleId;
+
         ctx.lock();
         try {
+            vehicleId = ctx.getVehicleId();
+
             // 入站校验：结构和序列一致性
             List<String> validationErrors = orderValidator.validate(order);
             if (!validationErrors.isEmpty()) {
@@ -96,7 +101,7 @@ public class ProxyOrderStateMachine {
                             Map.of("orderId", String.valueOf(order.getOrderId())));
                 }
                 log.warn("Vehicle {} rejected order due to validation errors: {}",
-                        ctx.getVehicleId(), validationErrors);
+                        vehicleId, validationErrors);
                 return;
             }
 
@@ -107,7 +112,7 @@ public class ProxyOrderStateMachine {
                     errorAggregator.addWarning(ctx, error, "validationError",
                             Map.of("orderId", order.getOrderId()));
                 }
-                log.warn("Vehicle {} rejected order update: {}", ctx.getVehicleId(), updateErrors);
+                log.warn("Vehicle {} rejected order update: {}", vehicleId, updateErrors);
                 return;
             }
 
@@ -117,7 +122,7 @@ public class ProxyOrderStateMachine {
                 return;
             }
 
-            log.info("Vehicle {} accepting order: {}", ctx.getVehicleId(), order.getOrderId());
+            log.info("Vehicle {} accepting order: {}", vehicleId, order.getOrderId());
 
             ctx.setCurrentOrder(order);
             ctx.setCurrentNodeIndex(0);
@@ -125,11 +130,15 @@ public class ProxyOrderStateMachine {
             ctx.setReachedWaypoint(true);
             initAgvState(ctx, order);
             ctx.setClientState(ProxyClientState.RUNNING);
-
-            eventPublisher.publishEvent(new OrderReceivedEvent(
-                    this, ctx.getVehicleId(), order.getOrderId(), order.getOrderUpdateId()));
+            accepted = true;
         } finally {
             ctx.unlock();
+        }
+
+        // 事件在锁外发布，避免死锁
+        if (accepted) {
+            eventPublisher.publishEvent(new OrderReceivedEvent(
+                    this, vehicleId, order.getOrderId(), order.getOrderUpdateId()));
         }
     }
 

@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component;
  *       检测连接状态变化并触发 {@link Vda5050ServerAdapter#onConnectionStateChanged} 回调</li>
  * </ul>
  *
- * <p>线程安全：超时检测在调度线程中执行，Connection 处理通过 VehicleContext 锁保护。</p>
+ * <p>线程安全：状态读取在 VehicleContext 锁保护下执行，回调和事件发布在锁外执行以避免死锁。</p>
  *
  * @see Vda5050ServerAdapter
  */
@@ -52,8 +52,7 @@ public class ServerConnectionMonitor {
     /**
      * 定期检查所有 Server 模式车辆的连接状态，检测超时车辆。
      *
-     * <p>检查间隔默认 30s，可通过 {@code vda5050.server.connectionCheckMs} 配置。
-     * 超时阈值由 {@code vda5050.server.stateTimeoutMs} 配置。</p>
+     * <p>锁内仅读取 timestamp，回调和事件发布在锁外执行。</p>
      */
     @Scheduled(fixedDelayString = "${vda5050.server.connectionCheckMs:30000}")
     public void checkConnections() {
@@ -61,17 +60,25 @@ public class ServerConnectionMonitor {
         long timeout = properties.getServer().getStateTimeoutMs();
 
         for (VehicleContext ctx : vehicleRegistry.getServerVehicles()) {
+            String vehicleId = null;
+            String formattedTimestamp = null;
+
             ctx.lock();
             try {
                 long lastSeen = ctx.getLastSeenTimestamp();
                 if (lastSeen > 0 && (now - lastSeen) > timeout) {
-                        String formattedTimestamp = TimestampUtil.format(lastSeen);
-                    serverAdapter.onVehicleTimeout(ctx.getVehicleId(), formattedTimestamp);
-                    eventPublisher.publishEvent(new VehicleTimeoutEvent(
-                            this, ctx.getVehicleId(), formattedTimestamp));
+                    vehicleId = ctx.getVehicleId();
+                    formattedTimestamp = TimestampUtil.format(lastSeen);
                 }
             } finally {
                 ctx.unlock();
+            }
+
+            // 回调和事件在锁外执行，避免死锁
+            if (vehicleId != null) {
+                serverAdapter.onVehicleTimeout(vehicleId, formattedTimestamp);
+                eventPublisher.publishEvent(new VehicleTimeoutEvent(
+                        this, vehicleId, formattedTimestamp));
             }
         }
     }
@@ -79,8 +86,7 @@ public class ServerConnectionMonitor {
     /**
      * 处理收到的 AGV Connection 消息，检测连接状态变化。
      *
-     * <p>当连接状态（ONLINE/OFFLINE/CONNECTIONBROKEN）与之前记录的不同时，
-     * 触发 {@link Vda5050ServerAdapter#onConnectionStateChanged} 回调。</p>
+     * <p>锁内仅读写状态，回调和事件发布在锁外执行。</p>
      *
      * @param vehicleId  车辆标识符
      * @param connection 收到的 Connection 消息
@@ -91,20 +97,25 @@ public class ServerConnectionMonitor {
             return;
         }
 
+        String prevState;
+        boolean stateChanged;
+
         ctx.lock();
         try {
-            String prevState = ctx.getConnectionState();
+            prevState = ctx.getConnectionState();
             ctx.setConnectionState(connection.getConnectionState());
-
-            if (!connection.getConnectionState().equals(prevState)) {
-                serverAdapter.onConnectionStateChanged(vehicleId, connection.getConnectionState());
-                eventPublisher.publishEvent(new ConnectionStateChangedEvent(
-                        this, vehicleId, prevState, connection.getConnectionState()));
-                log.info("Vehicle {} connection state: {} -> {}", vehicleId,
-                        prevState, connection.getConnectionState());
-            }
+            stateChanged = !connection.getConnectionState().equals(prevState);
         } finally {
             ctx.unlock();
+        }
+
+        // 回调和事件在锁外执行
+        if (stateChanged) {
+            serverAdapter.onConnectionStateChanged(vehicleId, connection.getConnectionState());
+            eventPublisher.publishEvent(new ConnectionStateChangedEvent(
+                    this, vehicleId, prevState, connection.getConnectionState()));
+            log.info("Vehicle {} connection state: {} -> {}", vehicleId,
+                    prevState, connection.getConnectionState());
         }
     }
 }

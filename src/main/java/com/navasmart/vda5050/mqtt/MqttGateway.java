@@ -103,26 +103,35 @@ public class MqttGateway {
     }
 
     /**
-     * 检查速率限制：如果距上次发布同类 topic 的间隔不足 minPublishIntervalMs，则跳过。
+     * 检查速率限制：如果距上次发布同 key 的间隔不足 minPublishIntervalMs，则跳过。
+     * key 格式为 topicType:manufacturer:serialNumber，按车辆粒度限流。
+     * 使用 ConcurrentHashMap.compute() 保证原子性。
      */
-    private boolean isRateLimited(String topicType) {
+    private boolean isRateLimited(String topicType, String manufacturer, String serialNumber) {
         long minInterval = properties.getMqtt().getMinPublishIntervalMs();
         if (minInterval <= 0) {
             return false;
         }
+        String key = topicType + ":" + manufacturer + ":" + serialNumber;
         long now = System.currentTimeMillis();
-        Long lastTime = lastPublishTimes.get(topicType);
-        if (lastTime != null && (now - lastTime) < minInterval) {
-            log.debug("Rate limited: skipping publish for topic type {}", topicType);
-            return true;
+        boolean[] limited = {false};
+        lastPublishTimes.compute(key, (k, lastTime) -> {
+            if (lastTime != null && (now - lastTime) < minInterval) {
+                limited[0] = true;
+                return lastTime;
+            }
+            return now;
+        });
+        if (limited[0]) {
+            log.debug("Rate limited: skipping publish for {}", key);
         }
-        lastPublishTimes.put(topicType, now);
-        return false;
+        return limited[0];
     }
 
     private void recordPublishMetric(String topic, String status) {
         if (meterRegistry != null) {
             String topicType = topic.substring(topic.lastIndexOf('/') + 1);
+            // Counter.builder().register() returns cached instance from MeterRegistry
             Counter.builder("vda5050.mqtt.publish")
                     .tag("topic_type", topicType)
                     .tag("status", status)
@@ -134,7 +143,7 @@ public class MqttGateway {
     // ============ Proxy 模式便捷方法 ============
 
     public void publishState(String manufacturer, String serialNumber, AgvState state) {
-        if (isRateLimited("state")) {
+        if (isRateLimited("state", manufacturer, serialNumber)) {
             return;
         }
         publish(resolveProxyClient(manufacturer, serialNumber),

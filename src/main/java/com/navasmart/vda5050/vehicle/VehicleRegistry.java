@@ -126,6 +126,13 @@ public class VehicleRegistry {
     /**
      * 运行时动态注册一辆新车辆。
      *
+     * <p><b>注意：</b>此方法仅操作内存注册表。要使车辆能收发 MQTT 消息，
+     * 还需调用 {@link com.navasmart.vda5050.mqtt.MqttConnectionManager} 的对应方法：
+     * <ul>
+     *   <li>Proxy 模式：{@code connectionManager.connectProxyVehicle(ctx)}</li>
+     *   <li>Server 模式：{@code connectionManager.subscribeServerVehicle(ctx)}</li>
+     * </ul>
+     *
      * @param manufacturer 制造商名称
      * @param serialNumber 车辆序列号
      * @param proxyMode    是否启用 Proxy 模式
@@ -148,6 +155,12 @@ public class VehicleRegistry {
 
     /**
      * 运行时注销一辆车辆。
+     *
+     * <p><b>注意：</b>此方法仅操作内存注册表。注销前应先断开 MQTT 连接：
+     * <ul>
+     *   <li>Proxy 模式：{@code connectionManager.disconnectProxyVehicle(ctx)}</li>
+     *   <li>Server 模式：{@code connectionManager.unsubscribeServerVehicle(ctx)}</li>
+     * </ul>
      *
      * @param manufacturer 制造商名称
      * @param serialNumber 车辆序列号

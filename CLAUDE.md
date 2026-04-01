@@ -23,7 +23,7 @@ mvn verify --batch-mode --no-transfer-progress  # CI-style (if mvnw download fai
 
 GitHub Actions workflow at `.github/workflows/ci.yml` — triggers on push/PR to main.
 Runs: compile → test → JaCoCo coverage → SpotBugs analysis → Checkstyle → upload JAR artifact.
-SpotBugs and Checkstyle are non-blocking (report only, don't fail build).
+SpotBugs and Checkstyle are **blocking** (fail the build on violations).
 
 ## Gotchas
 

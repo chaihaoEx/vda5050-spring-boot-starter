@@ -3,7 +3,8 @@ package com.navasmart.vda5050.proxy;
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
 import com.navasmart.vda5050.error.ErrorAggregator;
 import com.navasmart.vda5050.error.Vda5050ErrorFactory;
-import com.navasmart.vda5050.model.Action;
+import com.navasmart.vda5050.model.Node;
+import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.proxy.action.ActionHandlerRegistry;
 import com.navasmart.vda5050.proxy.statemachine.ProxyClientState;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
@@ -13,6 +14,7 @@ import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +26,7 @@ class GracefulShutdownTest {
 
     private ProxyOrderExecutor executor;
     private VehicleRegistry registry;
+    private MockProxyAdapter adapter;
 
     @BeforeEach
     void setUp() {
@@ -37,12 +40,12 @@ class GracefulShutdownTest {
         registry = new VehicleRegistry(props);
         registry.init();
 
-        MockProxyAdapter adapter = new MockProxyAdapter();
+        adapter = new MockProxyAdapter();
 
         executor = new ProxyOrderExecutor(registry,
                 new ErrorAggregator(new Vda5050ErrorFactory()),
                 new ActionHandlerRegistry(),
-                adapter, props);
+                adapter, props, event -> {});
     }
 
     @Test
@@ -52,7 +55,7 @@ class GracefulShutdownTest {
         ProxyOrderExecutor emptyExecutor = new ProxyOrderExecutor(emptyRegistry,
                 new ErrorAggregator(new Vda5050ErrorFactory()),
                 new ActionHandlerRegistry(),
-                new MockProxyAdapter(), emptyProps);
+                new MockProxyAdapter(), emptyProps, event -> {});
 
         assertThat(emptyExecutor.isIdle()).isTrue();
     }
@@ -74,16 +77,30 @@ class GracefulShutdownTest {
 
     @Test
     void shutdownPreventsExecutionLoop() {
-        // Set a vehicle to RUNNING state
+        // Set up a vehicle with an order so execute() would normally process it
         VehicleContext ctx = registry.get("TestMfg", "bot01");
         ctx.setClientState(ProxyClientState.RUNNING);
+        Order order = new Order();
+        order.setOrderId("test-order");
+        order.setNodes(new ArrayList<>());
+        order.setEdges(new ArrayList<>());
+        // Add a node so the executor has work to do
+        Node node = new Node();
+        node.setNodeId("n1");
+        node.setSequenceId(0);
+        node.setReleased(true);
+        node.setActions(new ArrayList<>());
+        order.getNodes().add(node);
+        ctx.setCurrentOrder(order);
+        ctx.setReachedWaypoint(true);
 
-        // After shutdown, execute() should return immediately without processing
+        // After shutdown, execute() should skip processing
         executor.shutdown();
         executor.execute();
 
-        // Vehicle is still in RUNNING (execution loop didn't process it since no order exists,
-        // but the important thing is shutdown flag was checked)
-        assertThat(ctx.getClientState()).isEqualTo(ProxyClientState.RUNNING);
+        // The order should still be present (not processed) because shutdown skipped execution
+        assertThat(ctx.getCurrentOrder()).isNotNull();
+        // Verify no navigation was triggered
+        assertThat(adapter.navigateCalls).isEmpty();
     }
 }

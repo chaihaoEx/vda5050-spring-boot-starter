@@ -60,8 +60,8 @@ public class MqttConnectionManager {
     private final Vda5050Properties properties;
     private final ObjectMapper objectMapper;
 
-    /** 共享 client 的重连尝试计数器 */
-    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+    /** 共享 client 的连续断连计数器（成功重连后重置为 0） */
+    private final AtomicInteger consecutiveDisconnects = new AtomicInteger(0);
 
     public MqttConnectionManager(MqttClient mqttClient, MqttInboundRouter inboundRouter,
                                  MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry,
@@ -96,7 +96,7 @@ public class MqttConnectionManager {
 
             // 注册重连监听器：重连后自动重新订阅 Server Topic
             inboundRouter.addReconnectListener(() -> {
-                reconnectAttempts.set(0);
+                consecutiveDisconnects.set(0);
                 try {
                     if (properties.getServer().isEnabled()) {
                         subscribeServerTopics(sharedMqttClient);
@@ -111,11 +111,11 @@ public class MqttConnectionManager {
             int maxAttempts = properties.getMqtt().getMaxReconnectAttempts();
             if (maxAttempts > 0) {
                 inboundRouter.addConnectionLostListener(() -> {
-                    int attempts = reconnectAttempts.incrementAndGet();
-                    if (attempts >= maxAttempts) {
+                    int count = consecutiveDisconnects.incrementAndGet();
+                    if (count >= maxAttempts) {
                         log.error("Max reconnect attempts ({}) reached for shared client. Giving up.", maxAttempts);
                         try {
-                            sharedMqttClient.disconnect();
+                            sharedMqttClient.disconnectForcibly();
                         } catch (MqttException e) {
                             log.warn("Error disconnecting after max retries: {}", e.getMessage());
                         }
@@ -373,7 +373,7 @@ public class MqttConnectionManager {
                     MqttClient client = vehicleContext.getProxyMqttClient();
                     if (client != null) {
                         try {
-                            client.disconnect();
+                            client.disconnectForcibly();
                         } catch (MqttException e) {
                             log.warn("Error disconnecting vehicle {} after max retries: {}",
                                     vehicleId, e.getMessage());

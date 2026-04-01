@@ -30,7 +30,7 @@ public final class SslUtil {
         TrustManager[] trustManagers = null;
 
         if (config.getKeystorePath() != null && !config.getKeystorePath().isEmpty()) {
-            KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+            KeyStore ks = KeyStore.getInstance(config.getKeystoreType());
             try (FileInputStream fis = new FileInputStream(config.getKeystorePath())) {
                 ks.load(fis, config.getKeystorePassword().toCharArray());
             }
@@ -40,7 +40,7 @@ public final class SslUtil {
         }
 
         if (config.getTruststorePath() != null && !config.getTruststorePath().isEmpty()) {
-            KeyStore ts = KeyStore.getInstance(KeyStore.getDefaultType());
+            KeyStore ts = KeyStore.getInstance(config.getKeystoreType());
             try (FileInputStream fis = new FileInputStream(config.getTruststorePath())) {
                 ts.load(fis, config.getTruststorePassword().toCharArray());
             }

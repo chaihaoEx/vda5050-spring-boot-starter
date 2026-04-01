@@ -134,9 +134,10 @@ class ProxyOrderFlowTest {
         public ProxyOrderExecutor proxyOrderExecutor(VehicleRegistry vehicleRegistry,
                                                       ErrorAggregator errorAggregator,
                                                       ActionHandlerRegistry actionHandlerRegistry,
-                                                      Vda5050Properties properties) {
+                                                      Vda5050Properties properties,
+                                                      org.springframework.context.ApplicationEventPublisher eventPublisher) {
             return new ProxyOrderExecutor(vehicleRegistry, errorAggregator, actionHandlerRegistry,
-                    SHARED_ADAPTER, properties);
+                    SHARED_ADAPTER, properties, eventPublisher);
         }
 
         @Bean

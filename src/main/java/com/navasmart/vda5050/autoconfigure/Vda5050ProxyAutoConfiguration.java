@@ -87,9 +87,10 @@ public class Vda5050ProxyAutoConfiguration {
                                                   ErrorAggregator errorAggregator,
                                                   ActionHandlerRegistry actionHandlerRegistry,
                                                   Vda5050ProxyVehicleAdapter vehicleAdapter,
-                                                  Vda5050Properties properties) {
+                                                  Vda5050Properties properties,
+                                                  ApplicationEventPublisher eventPublisher) {
         return new ProxyOrderExecutor(vehicleRegistry, errorAggregator,
-                actionHandlerRegistry, vehicleAdapter, properties);
+                actionHandlerRegistry, vehicleAdapter, properties, eventPublisher);
     }
 
     /**

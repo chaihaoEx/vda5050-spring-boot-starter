@@ -172,6 +172,8 @@ public class Vda5050Properties {
         private String truststorePassword = "";
         /** SSL 协议版本。默认：{@code TLSv1.3} */
         private String protocol = "TLSv1.3";
+        /** Keystore/Truststore 类型。默认：{@code JKS}，也支持 {@code PKCS12} */
+        private String keystoreType = "JKS";
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -190,6 +192,9 @@ public class Vda5050Properties {
 
         public String getProtocol() { return protocol; }
         public void setProtocol(String protocol) { this.protocol = protocol; }
+
+        public String getKeystoreType() { return keystoreType; }
+        public void setKeystoreType(String keystoreType) { this.keystoreType = keystoreType; }
     }
 
     /**
