@@ -39,6 +39,26 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Actuator (optional — enables health indicator and metrics) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Micrometer (optional — enables metrics instrumentation) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- MQTT -->
         <dependency>
             <groupId>org.eclipse.paho</groupId>
@@ -140,7 +160,7 @@
                     <effort>Max</effort>
                     <threshold>High</threshold>
                     <xmlOutput>true</xmlOutput>
-                    <failOnError>false</failOnError>
+                    <failOnError>true</failOnError>
                 </configuration>
                 <executions>
                     <execution>
@@ -160,7 +180,7 @@
                 <configuration>
                     <configLocation>checkstyle.xml</configLocation>
                     <violationSeverity>warning</violationSeverity>
-                    <failOnViolation>false</failOnViolation>
+                    <failOnViolation>true</failOnViolation>
                     <consoleOutput>true</consoleOutput>
                 </configuration>
                 <executions>
