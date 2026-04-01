@@ -6,7 +6,7 @@
 
 ---
 
-## Phase 1 — Critical Safety Fixes（线程安全 + 资源泄露）
+## Phase 1 — Critical Safety Fixes（线程安全 + 资源泄露）✅ 已完成
 
 **分支**: `fix/phase1-critical-safety`
 
@@ -14,21 +14,23 @@
 
 | # | 问题 | 文件 | 修复方式 |
 |---|------|------|---------|
-| C1 | ProxyHeartbeatScheduler 无锁读写 AgvState | `proxy/heartbeat/ProxyHeartbeatScheduler.java` | `updateStateFromProvider()` 加锁，snapshot AgvState 后解锁再 publish |
-| C2 | MqttClient 连接失败资源泄露 | `mqtt/MqttConnectionManager.java:161-170` | try/finally 包裹 connect()，失败时 vehicleClient.close() |
-| C3 | VehicleContext 暴露原始 HashMap | `vehicle/VehicleContext.java:207` | getActionStartTimes() 返回 unmodifiableMap，新增 putActionStartTime/removeActionStartTime 方法 |
-| C4 | Model 无防御性拷贝 | 28 个 model POJO | 集合 getter 返回 unmodifiableList，setter 做 new ArrayList<>(list) |
-| C5 | Model 无 equals/hashCode | 28 个 model POJO | 基于业务 ID 实现 equals/hashCode（Order=orderId, Node=nodeId+sequenceId 等） |
-| C6 | SslUtil 密码 char[] 未清除 | `mqtt/SslUtil.java:35-46` | finally 块中 Arrays.fill(password, '\0') |
-| C7 | AutoConfig MqttClient @Bean 原始异常 | `autoconfigure/Vda5050AutoConfiguration.java:73` | catch MqttException → throw IllegalStateException |
-| C8 | OrderDispatcher publish 异常未捕获 | `server/dispatch/OrderDispatcher.java:70` + `mqtt/MqttGateway.java` | MqttGateway.publish() 返回 boolean，OrderDispatcher 据此返回 SendResult.failure() |
+| C1 | ProxyHeartbeatScheduler 无锁读写 AgvState | `proxy/heartbeat/ProxyHeartbeatScheduler.java` | `publishHeartbeat()` 整体加锁（含 `updateStateFromProvider()` + header 字段设置），`copyAgvState()` snapshot 后解锁再 publish |
+| C2 | MqttClient 连接失败资源泄露 | `mqtt/MqttConnectionManager.java` | try/catch 包裹 connect()，失败时 vehicleClient.close() 后 re-throw |
+| C3 | VehicleContext 暴露原始 HashMap | `vehicle/VehicleContext.java` | getActionStartTimes() 返回 unmodifiableMap，新增 putActionStartTime/removeActionStartTime/clearActionStartTimes 方法，ProxyOrderExecutor 6 处调用点同步更新 |
+| C4 | Model 无防御性拷贝 | 10 个含 List 字段的 model POJO | **仅 setter 做防御性拷贝**（`new ArrayList<>(list)`），getter 保持可变（避免破坏内部代码直接操作列表的模式） |
+| C5 | Model 无 equals/hashCode | 11 个有业务 ID 的 model POJO | 基于业务 ID 实现 equals/hashCode（Order=orderId+orderUpdateId, Node=nodeId+sequenceId, Action=actionId 等），其余 17 个无天然 ID 的 POJO 推迟到 Phase 5 |
+| C6 | SslUtil 密码 char[] 未清除 | `mqtt/SslUtil.java` | 密码存入局部 char[] 变量，finally 块中 Arrays.fill(password, '\0') |
+| C7 | AutoConfig MqttClient @Bean 原始异常 | `autoconfigure/Vda5050AutoConfiguration.java` | catch MqttException → throw IllegalStateException，移除方法签名的 throws 声明 |
+| C8 | OrderDispatcher + InstantActionSender publish 异常未捕获 | `MqttGateway.java` + `OrderDispatcher.java` + `InstantActionSender.java` | MqttGateway.publish() 及 5 个便捷方法返回 boolean，OrderDispatcher 和 InstantActionSender 据此返回 SendResult.failure() |
 
 ### 补充
 - VehicleContext 新增 `tryLock(long timeout, TimeUnit unit)` 方法
-- ProxyOrderExecutor CompletableFuture 回调改用 tryLock(5s) 替代无超时 lock()
+- ProxyOrderExecutor CompletableFuture 回调（action callback + navigation callback）改用 tryLock(5s) 替代无超时 lock()，超时时记录 ERROR 日志并跳过
 
-**预估工作量**: 3-4 天  
-**测试**: Model equals/hashCode 测试、SslUtil char[] 清除测试、心跳并发竞争测试
+### 测试新增（71 个测试用例）
+- `VehicleContextTest` — tryLock 超时、unmodifiable map、put/remove/clear 方法（6 tests）
+- `ModelDefensiveCopyTest` — 10 个 POJO setter 防御性拷贝验证（10 tests）
+- `ModelEqualsHashCodeTest` — 11 个 POJO equals/hashCode 契约验证（55 tests）
 
 ---
 
@@ -114,7 +116,7 @@
 
 | Phase | 名称 | 修复数 | 工作量 | 关键文件 |
 |-------|------|--------|--------|---------|
-| 1 | Critical Safety | 8 CRITICAL | 3-4天 | HeartbeatScheduler, VehicleContext, 28 models, SslUtil, MqttGateway, OrderDispatcher |
+| 1 | Critical Safety ✅ | 8 CRITICAL | 已完成 | HeartbeatScheduler, VehicleContext, 10+11 models, SslUtil, MqttGateway, OrderDispatcher, InstantActionSender |
 | 2 | High Correctness | 5 HIGH | 2天 | ProxyOrderExecutor, AgvStateTracker, MqttGateway, ProxyAutoConfig |
 | 3 | Visibility + Spec | 6 MEDIUM | 1.5-2天 | MqttInboundRouter, HealthIndicator, AutoConfig, InstantActionSender |
 | 4 | Decompose + Lock Split | 3 MEDIUM (结构性) | 3天 | ProxyOrderExecutor→3类, VehicleContext, MqttConnectionManager |
