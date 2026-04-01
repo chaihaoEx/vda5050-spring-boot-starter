@@ -12,6 +12,7 @@ import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -64,8 +65,9 @@ public class Vda5050ServerAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnBean(Vda5050ServerAdapter.class)
     public AgvStateTracker agvStateTracker(VehicleRegistry vehicleRegistry,
-                                            Vda5050ServerAdapter serverAdapter) {
-        return new AgvStateTracker(vehicleRegistry, serverAdapter);
+                                            Vda5050ServerAdapter serverAdapter,
+                                            ApplicationEventPublisher eventPublisher) {
+        return new AgvStateTracker(vehicleRegistry, serverAdapter, eventPublisher);
     }
 
     /**
@@ -87,8 +89,9 @@ public class Vda5050ServerAutoConfiguration {
     @ConditionalOnBean(Vda5050ServerAdapter.class)
     public ServerConnectionMonitor serverConnectionMonitor(VehicleRegistry vehicleRegistry,
                                                             Vda5050Properties properties,
-                                                            Vda5050ServerAdapter serverAdapter) {
-        return new ServerConnectionMonitor(vehicleRegistry, properties, serverAdapter);
+                                                            Vda5050ServerAdapter serverAdapter,
+                                                            ApplicationEventPublisher eventPublisher) {
+        return new ServerConnectionMonitor(vehicleRegistry, properties, serverAdapter, eventPublisher);
     }
 
     /**

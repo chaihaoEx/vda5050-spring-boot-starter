@@ -122,4 +122,43 @@ public class VehicleRegistry {
     public Collection<VehicleContext> getAll() {
         return vehicles.values();
     }
+
+    /**
+     * 运行时动态注册一辆新车辆。
+     *
+     * @param manufacturer 制造商名称
+     * @param serialNumber 车辆序列号
+     * @param proxyMode    是否启用 Proxy 模式
+     * @param serverMode   是否启用 Server 模式
+     * @return 创建或已存在的 VehicleContext
+     */
+    public VehicleContext registerVehicle(String manufacturer, String serialNumber,
+                                          boolean proxyMode, boolean serverMode) {
+        VehicleContext ctx = getOrCreate(manufacturer, serialNumber);
+        if (proxyMode) {
+            ctx.setProxyMode(true);
+        }
+        if (serverMode) {
+            ctx.setServerMode(true);
+        }
+        log.info("Dynamically registered vehicle: {} (proxy={}, server={})",
+                ctx.getVehicleId(), proxyMode, serverMode);
+        return ctx;
+    }
+
+    /**
+     * 运行时注销一辆车辆。
+     *
+     * @param manufacturer 制造商名称
+     * @param serialNumber 车辆序列号
+     * @return 被移除的 VehicleContext，不存在时返回 null
+     */
+    public VehicleContext unregisterVehicle(String manufacturer, String serialNumber) {
+        String key = manufacturer + ":" + serialNumber;
+        VehicleContext removed = vehicles.remove(key);
+        if (removed != null) {
+            log.info("Unregistered vehicle: {}", removed.getVehicleId());
+        }
+        return removed;
+    }
 }

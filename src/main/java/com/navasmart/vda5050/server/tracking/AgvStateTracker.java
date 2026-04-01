@@ -5,11 +5,16 @@ import com.navasmart.vda5050.model.AgvState;
 import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.model.enums.ActionStatus;
 import com.navasmart.vda5050.model.enums.ErrorLevel;
+import com.navasmart.vda5050.event.ErrorOccurredEvent;
+import com.navasmart.vda5050.event.NodeReachedEvent;
+import com.navasmart.vda5050.event.OrderCompletedEvent;
+import com.navasmart.vda5050.event.OrderFailedEvent;
 import com.navasmart.vda5050.server.callback.Vda5050ServerAdapter;
 import com.navasmart.vda5050.vehicle.VehicleContext;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -42,10 +47,13 @@ public class AgvStateTracker {
 
     private final VehicleRegistry vehicleRegistry;
     private final Vda5050ServerAdapter serverAdapter;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public AgvStateTracker(VehicleRegistry vehicleRegistry, Vda5050ServerAdapter serverAdapter) {
+    public AgvStateTracker(VehicleRegistry vehicleRegistry, Vda5050ServerAdapter serverAdapter,
+                           ApplicationEventPublisher eventPublisher) {
         this.vehicleRegistry = vehicleRegistry;
         this.serverAdapter = serverAdapter;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -74,6 +82,8 @@ public class AgvStateTracker {
                 if (newState.getLastNodeId() != null) {
                     serverAdapter.onNodeReached(vehicleId, newState.getLastNodeId(),
                             newState.getLastNodeSequenceId());
+                    eventPublisher.publishEvent(new NodeReachedEvent(
+                            this, vehicleId, newState.getLastNodeId(), newState.getLastNodeSequenceId()));
                 }
             }
 
@@ -146,8 +156,12 @@ public class AgvStateTracker {
 
         if (hasFailedActions || hasFatalErrors) {
             serverAdapter.onOrderFailed(vehicleId, state.getOrderId(), state.getErrors());
+            eventPublisher.publishEvent(new OrderFailedEvent(
+                    this, vehicleId, state.getOrderId(), state.getErrors()));
         } else {
             serverAdapter.onOrderCompleted(vehicleId, state.getOrderId());
+            eventPublisher.publishEvent(new OrderCompletedEvent(
+                    this, vehicleId, state.getOrderId()));
         }
 
         ctx.setLastSentOrder(null);
@@ -162,7 +176,10 @@ public class AgvStateTracker {
     private void detectErrorChanges(String vehicleId, AgvState prev, AgvState curr) {
         if (prev == null) {
             // 首次收到状态，所有错误都视为新错误
-            curr.getErrors().forEach(e -> serverAdapter.onErrorReported(vehicleId, e));
+            curr.getErrors().forEach(e -> {
+                serverAdapter.onErrorReported(vehicleId, e);
+                eventPublisher.publishEvent(new ErrorOccurredEvent(this, vehicleId, e));
+            });
             return;
         }
 
@@ -177,7 +194,10 @@ public class AgvStateTracker {
         // 在当前状态中存在但在前一次状态中不存在的 -> 新增错误
         curr.getErrors().stream()
                 .filter(e -> !prevErrorTypes.contains(e.getErrorType() + ":" + e.getErrorDescription()))
-                .forEach(e -> serverAdapter.onErrorReported(vehicleId, e));
+                .forEach(e -> {
+                    serverAdapter.onErrorReported(vehicleId, e);
+                    eventPublisher.publishEvent(new ErrorOccurredEvent(this, vehicleId, e));
+                });
 
         // 在前一次状态中存在但在当前状态中不存在的 -> 已清除的错误
         prev.getErrors().stream()

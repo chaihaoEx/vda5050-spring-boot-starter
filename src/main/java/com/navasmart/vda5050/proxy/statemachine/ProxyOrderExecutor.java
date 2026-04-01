@@ -64,6 +64,8 @@ public class ProxyOrderExecutor {
     private final Vda5050ProxyVehicleAdapter vehicleAdapter;
     private final Vda5050Properties properties;
 
+    private volatile boolean shuttingDown = false;
+
     public ProxyOrderExecutor(VehicleRegistry vehicleRegistry,
                               ErrorAggregator errorAggregator,
                               ActionHandlerRegistry actionHandlerRegistry,
@@ -83,9 +85,28 @@ public class ProxyOrderExecutor {
      */
     @Scheduled(fixedDelayString = "${vda5050.proxy.orderLoopIntervalMs:200}")
     public void execute() {
+        if (shuttingDown) {
+            return;
+        }
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
             executeForVehicle(ctx);
         }
+    }
+
+    /**
+     * 通知执行器进入关闭流程，停止接受新的执行循环。
+     */
+    public void shutdown() {
+        this.shuttingDown = true;
+        log.info("ProxyOrderExecutor shutdown initiated");
+    }
+
+    /**
+     * 检查所有 Proxy 车辆是否都处于 IDLE 状态（无进行中的工作）。
+     */
+    public boolean isIdle() {
+        return vehicleRegistry.getProxyVehicles().stream()
+                .allMatch(ctx -> ctx.getClientState() == ProxyClientState.IDLE);
     }
 
     /**
