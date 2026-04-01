@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * VDA5050 错误信息。
@@ -57,11 +58,28 @@ public class Error {
     public void setErrorType(String errorType) { this.errorType = errorType; }
 
     public List<ErrorReference> getErrorReferences() { return errorReferences; }
-    public void setErrorReferences(List<ErrorReference> errorReferences) { this.errorReferences = errorReferences; }
+    public void setErrorReferences(List<ErrorReference> errorReferences) {
+        this.errorReferences = errorReferences != null ? new ArrayList<>(errorReferences) : new ArrayList<>();
+    }
 
     public String getErrorDescription() { return errorDescription; }
     public void setErrorDescription(String errorDescription) { this.errorDescription = errorDescription; }
 
     public String getErrorLevel() { return errorLevel; }
     public void setErrorLevel(String errorLevel) { this.errorLevel = errorLevel; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        Error that = (Error) o;
+        return Objects.equals(errorType, that.errorType)
+                && Objects.equals(errorDescription, that.errorDescription)
+                && Objects.equals(errorLevel, that.errorLevel);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(errorType, errorDescription, errorLevel);
+    }
 }

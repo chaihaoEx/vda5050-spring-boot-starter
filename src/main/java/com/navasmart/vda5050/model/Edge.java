@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * VDA5050 路径边（Edge）。
@@ -126,5 +127,18 @@ public class Edge {
     public void setLength(Double length) { this.length = length; }
 
     public List<Action> getActions() { return actions; }
-    public void setActions(List<Action> actions) { this.actions = actions; }
+    public void setActions(List<Action> actions) { this.actions = actions != null ? new ArrayList<>(actions) : new ArrayList<>(); }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        Edge that = (Edge) o;
+        return sequenceId == that.sequenceId && Objects.equals(edgeId, that.edgeId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(edgeId, sequenceId);
+    }
 }

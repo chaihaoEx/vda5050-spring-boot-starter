@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * VDA5050 订单中的路径节点（Node）。
@@ -58,5 +59,18 @@ public class Node {
     public void setNodePosition(NodePosition nodePosition) { this.nodePosition = nodePosition; }
 
     public List<Action> getActions() { return actions; }
-    public void setActions(List<Action> actions) { this.actions = actions; }
+    public void setActions(List<Action> actions) { this.actions = actions != null ? new ArrayList<>(actions) : new ArrayList<>(); }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        Node that = (Node) o;
+        return sequenceId == that.sequenceId && Objects.equals(nodeId, that.nodeId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(nodeId, sequenceId);
+    }
 }

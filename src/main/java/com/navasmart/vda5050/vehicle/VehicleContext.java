@@ -5,8 +5,10 @@ import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.proxy.statemachine.ProxyClientState;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -143,6 +145,18 @@ public class VehicleContext {
     public void unlock() { stateLock.unlock(); }
 
     /**
+     * 尝试在指定超时内获取状态锁。
+     *
+     * @param timeout 最大等待时间
+     * @param unit    时间单位
+     * @return 是否成功获取锁
+     * @throws InterruptedException 等待过程中被中断
+     */
+    public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException {
+        return stateLock.tryLock(timeout, unit);
+    }
+
+    /**
      * 生成下一个 state 消息头 ID（原子自增）。
      *
      * @return 新的 headerId
@@ -204,7 +218,13 @@ public class VehicleContext {
     public long getNavigationStartTime() { return navigationStartTime; }
     public void setNavigationStartTime(long navigationStartTime) { this.navigationStartTime = navigationStartTime; }
 
-    public Map<String, Long> getActionStartTimes() { return actionStartTimes; }
+    public Map<String, Long> getActionStartTimes() { return Collections.unmodifiableMap(actionStartTimes); }
+
+    public void putActionStartTime(String actionId, long startTime) { actionStartTimes.put(actionId, startTime); }
+
+    public void removeActionStartTime(String actionId) { actionStartTimes.remove(actionId); }
+
+    public void clearActionStartTimes() { actionStartTimes.clear(); }
 
     public MqttClient getProxyMqttClient() { return proxyMqttClient; }
     public void setProxyMqttClient(MqttClient proxyMqttClient) { this.proxyMqttClient = proxyMqttClient; }

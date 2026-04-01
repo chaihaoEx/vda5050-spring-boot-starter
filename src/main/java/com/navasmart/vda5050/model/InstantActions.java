@@ -54,5 +54,7 @@ public class InstantActions {
     public void setSerialNumber(String serialNumber) { this.serialNumber = serialNumber; }
 
     public List<Action> getInstantActions() { return instantActions; }
-    public void setInstantActions(List<Action> instantActions) { this.instantActions = instantActions; }
+    public void setInstantActions(List<Action> instantActions) {
+        this.instantActions = instantActions != null ? new ArrayList<>(instantActions) : new ArrayList<>();
+    }
 }

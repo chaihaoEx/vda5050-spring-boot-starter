@@ -1,6 +1,7 @@
 package com.navasmart.vda5050.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Objects;
 
 /**
  * VDA5050 AGV 状态中的边状态（EdgeState）。
@@ -42,4 +43,17 @@ public class EdgeState {
 
     public Trajectory getTrajectory() { return trajectory; }
     public void setTrajectory(Trajectory trajectory) { this.trajectory = trajectory; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        EdgeState that = (EdgeState) o;
+        return sequenceId == that.sequenceId && Objects.equals(edgeId, that.edgeId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(edgeId, sequenceId);
+    }
 }

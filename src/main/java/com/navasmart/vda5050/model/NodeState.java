@@ -1,6 +1,7 @@
 package com.navasmart.vda5050.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Objects;
 
 /**
  * VDA5050 AGV 状态中的节点状态（NodeState）。
@@ -42,4 +43,17 @@ public class NodeState {
 
     public boolean isReleased() { return released; }
     public void setReleased(boolean released) { this.released = released; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        NodeState that = (NodeState) o;
+        return sequenceId == that.sequenceId && Objects.equals(nodeId, that.nodeId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(nodeId, sequenceId);
+    }
 }

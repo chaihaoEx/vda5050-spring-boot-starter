@@ -67,7 +67,10 @@ public class OrderDispatcher {
             ctx.unlock();
         }
 
-        mqttGateway.publishOrder(ctx.getManufacturer(), ctx.getSerialNumber(), order);
+        boolean published = mqttGateway.publishOrder(ctx.getManufacturer(), ctx.getSerialNumber(), order);
+        if (!published) {
+            return SendResult.failure("Failed to publish order via MQTT");
+        }
         log.info("Sent order {} to vehicle {}", order.getOrderId(), vehicleId);
         return SendResult.success();
     }

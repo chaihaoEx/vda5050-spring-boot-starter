@@ -135,10 +135,10 @@ public class AgvState {
     public void setLastNodeSequenceId(int lastNodeSequenceId) { this.lastNodeSequenceId = lastNodeSequenceId; }
 
     public List<NodeState> getNodeStates() { return nodeStates; }
-    public void setNodeStates(List<NodeState> nodeStates) { this.nodeStates = nodeStates; }
+    public void setNodeStates(List<NodeState> nodeStates) { this.nodeStates = nodeStates != null ? new ArrayList<>(nodeStates) : new ArrayList<>(); }
 
     public List<EdgeState> getEdgeStates() { return edgeStates; }
-    public void setEdgeStates(List<EdgeState> edgeStates) { this.edgeStates = edgeStates; }
+    public void setEdgeStates(List<EdgeState> edgeStates) { this.edgeStates = edgeStates != null ? new ArrayList<>(edgeStates) : new ArrayList<>(); }
 
     public AgvPosition getAgvPosition() { return agvPosition; }
     public void setAgvPosition(AgvPosition agvPosition) { this.agvPosition = agvPosition; }
@@ -147,7 +147,7 @@ public class AgvState {
     public void setVelocity(Velocity velocity) { this.velocity = velocity; }
 
     public List<Load> getLoads() { return loads; }
-    public void setLoads(List<Load> loads) { this.loads = loads; }
+    public void setLoads(List<Load> loads) { this.loads = loads != null ? new ArrayList<>(loads) : new ArrayList<>(); }
 
     public boolean isDriving() { return driving; }
     public void setDriving(boolean driving) { this.driving = driving; }
@@ -162,7 +162,9 @@ public class AgvState {
     public void setDistanceSinceLastNode(double distanceSinceLastNode) { this.distanceSinceLastNode = distanceSinceLastNode; }
 
     public List<ActionState> getActionStates() { return actionStates; }
-    public void setActionStates(List<ActionState> actionStates) { this.actionStates = actionStates; }
+    public void setActionStates(List<ActionState> actionStates) {
+        this.actionStates = actionStates != null ? new ArrayList<>(actionStates) : new ArrayList<>();
+    }
 
     public BatteryState getBatteryState() { return batteryState; }
     public void setBatteryState(BatteryState batteryState) { this.batteryState = batteryState; }
@@ -171,10 +173,14 @@ public class AgvState {
     public void setOperatingMode(String operatingMode) { this.operatingMode = operatingMode; }
 
     public List<Error> getErrors() { return errors; }
-    public void setErrors(List<Error> errors) { this.errors = errors; }
+    public void setErrors(List<Error> errors) {
+        this.errors = errors != null ? new ArrayList<>(errors) : new ArrayList<>();
+    }
 
     public List<Info> getInformations() { return informations; }
-    public void setInformations(List<Info> informations) { this.informations = informations; }
+    public void setInformations(List<Info> informations) {
+        this.informations = informations != null ? new ArrayList<>(informations) : new ArrayList<>();
+    }
 
     public SafetyState getSafetyState() { return safetyState; }
     public void setSafetyState(SafetyState safetyState) { this.safetyState = safetyState; }
