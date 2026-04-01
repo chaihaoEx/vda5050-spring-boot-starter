@@ -1,6 +1,8 @@
 package com.navasmart.vda5050.server.heartbeat;
 
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
+import com.navasmart.vda5050.event.ConnectionStateChangedEvent;
+import com.navasmart.vda5050.event.VehicleTimeoutEvent;
 import com.navasmart.vda5050.model.Connection;
 import com.navasmart.vda5050.server.callback.Vda5050ServerAdapter;
 import com.navasmart.vda5050.util.TimestampUtil;
@@ -8,6 +10,7 @@ import com.navasmart.vda5050.vehicle.VehicleContext;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -35,12 +38,15 @@ public class ServerConnectionMonitor {
     private final VehicleRegistry vehicleRegistry;
     private final Vda5050Properties properties;
     private final Vda5050ServerAdapter serverAdapter;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ServerConnectionMonitor(VehicleRegistry vehicleRegistry, Vda5050Properties properties,
-                                   Vda5050ServerAdapter serverAdapter) {
+                                   Vda5050ServerAdapter serverAdapter,
+                                   ApplicationEventPublisher eventPublisher) {
         this.vehicleRegistry = vehicleRegistry;
         this.properties = properties;
         this.serverAdapter = serverAdapter;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -55,9 +61,17 @@ public class ServerConnectionMonitor {
         long timeout = properties.getServer().getStateTimeoutMs();
 
         for (VehicleContext ctx : vehicleRegistry.getServerVehicles()) {
-            long lastSeen = ctx.getLastSeenTimestamp();
-            if (lastSeen > 0 && (now - lastSeen) > timeout) {
-                serverAdapter.onVehicleTimeout(ctx.getVehicleId(), TimestampUtil.format(lastSeen));
+            ctx.lock();
+            try {
+                long lastSeen = ctx.getLastSeenTimestamp();
+                if (lastSeen > 0 && (now - lastSeen) > timeout) {
+                        String formattedTimestamp = TimestampUtil.format(lastSeen);
+                    serverAdapter.onVehicleTimeout(ctx.getVehicleId(), formattedTimestamp);
+                    eventPublisher.publishEvent(new VehicleTimeoutEvent(
+                            this, ctx.getVehicleId(), formattedTimestamp));
+                }
+            } finally {
+                ctx.unlock();
             }
         }
     }
@@ -84,6 +98,8 @@ public class ServerConnectionMonitor {
 
             if (!connection.getConnectionState().equals(prevState)) {
                 serverAdapter.onConnectionStateChanged(vehicleId, connection.getConnectionState());
+                eventPublisher.publishEvent(new ConnectionStateChangedEvent(
+                        this, vehicleId, prevState, connection.getConnectionState()));
                 log.info("Vehicle {} connection state: {} -> {}", vehicleId,
                         prevState, connection.getConnectionState());
             }

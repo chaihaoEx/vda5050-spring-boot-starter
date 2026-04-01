@@ -9,7 +9,7 @@ import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.vehicle.VehicleContext;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.function.BiConsumer;
 
 /**
- * MQTT 入站消息路由器，实现 {@link MqttCallback} 接口，负责将收到的消息按 Topic 后缀分发到对应的处理器。
+ * MQTT 入站消息路由器，实现 {@link MqttCallbackExtended} 接口，负责将收到的消息按 Topic 后缀分发到对应的处理器。
  *
  * <h2>路由规则</h2>
  * <p>收到消息后，提取 Topic 的最后一段后缀，并根据后缀分发：</p>
@@ -32,12 +32,12 @@ import java.util.function.BiConsumer;
  *   <li>{@code factsheet} -> {@link #setFactsheetHandler(BiConsumer)}（Server 模式接收 Factsheet）</li>
  * </ul>
  *
- * <p>如果对应 handler 未设置（为 null），则静默忽略该类消息。</p>
- *
- * <p>当 MQTT 连接断开时，会通知所有通过 {@link #addConnectionLostListener(Runnable)} 注册的监听器。</p>
+ * <h2>重连支持</h2>
+ * <p>实现 {@link MqttCallbackExtended#connectComplete(boolean, String)}，
+ * 重连成功后通知所有已注册的重连监听器（用于重新订阅 Topic）。</p>
  */
 @Component
-public class MqttInboundRouter implements MqttCallback {
+public class MqttInboundRouter implements MqttCallbackExtended {
 
     private static final Logger log = LoggerFactory.getLogger(MqttInboundRouter.class);
 
@@ -63,6 +63,9 @@ public class MqttInboundRouter implements MqttCallback {
     /** 连接丢失监听器列表 */
     private final List<Runnable> connectionLostListeners = new ArrayList<>();
 
+    /** 重连成功监听器列表 */
+    private final List<Runnable> reconnectListeners = new ArrayList<>();
+
     public MqttInboundRouter(ObjectMapper objectMapper, MqttTopicResolver topicResolver,
                              VehicleRegistry vehicleRegistry) {
         this.objectMapper = objectMapper;
@@ -71,18 +74,19 @@ public class MqttInboundRouter implements MqttCallback {
     }
 
     /**
+     * MQTT 连接完成时的回调（首次连接或重连）。
+     * 重连时通知所有已注册的重连监听器（用于重新订阅 Topic）。
+     */
+    @Override
+    public void connectComplete(boolean reconnect, String serverURI) {
+        if (reconnect) {
+            log.info("MQTT reconnected to {}", serverURI);
+            reconnectListeners.forEach(Runnable::run);
+        }
+    }
+
+    /**
      * 收到 MQTT 消息时的回调，按 Topic 后缀路由到对应的 {@link BiConsumer} 处理器。
-     *
-     * <p>处理流程：
-     * <ol>
-     *   <li>从 Topic 中提取后缀和车辆标识</li>
-     *   <li>在 {@link VehicleRegistry} 中查找对应的 {@link VehicleContext}</li>
-     *   <li>将 JSON payload 反序列化为对应模型对象</li>
-     *   <li>调用已注册的 handler 进行业务处理</li>
-     * </ol>
-     *
-     * @param topic   消息的 MQTT Topic
-     * @param message MQTT 消息体
      */
     @Override
     public void messageArrived(String topic, MqttMessage message) {
@@ -102,7 +106,6 @@ public class MqttInboundRouter implements MqttCallback {
 
             byte[] payload = message.getPayload();
 
-            // 根据 Topic 后缀分发到对应的处理器
             switch (suffix) {
                 case "order" -> {
                     if (orderHandler != null) {
@@ -143,8 +146,6 @@ public class MqttInboundRouter implements MqttCallback {
 
     /**
      * MQTT 连接丢失时的回调。通知所有已注册的连接丢失监听器。
-     *
-     * @param cause 导致连接丢失的异常
      */
     @Override
     public void connectionLost(Throwable cause) {
@@ -152,11 +153,6 @@ public class MqttInboundRouter implements MqttCallback {
         connectionLostListeners.forEach(Runnable::run);
     }
 
-    /**
-     * 消息发送完成回调（本实现中无需处理）。
-     *
-     * @param token 发送令牌
-     */
     @Override
     public void deliveryComplete(IMqttDeliveryToken token) {
         // 无需处理
@@ -170,10 +166,6 @@ public class MqttInboundRouter implements MqttCallback {
     public void setConnectionHandler(BiConsumer<VehicleContext, Connection> handler) { this.connectionHandler = handler; }
     public void setFactsheetHandler(BiConsumer<VehicleContext, Factsheet> handler) { this.factsheetHandler = handler; }
 
-    /**
-     * 添加 MQTT 连接丢失监听器。
-     *
-     * @param listener 连接丢失时执行的回调
-     */
     public void addConnectionLostListener(Runnable listener) { this.connectionLostListeners.add(listener); }
+    public void addReconnectListener(Runnable listener) { this.reconnectListeners.add(listener); }
 }
