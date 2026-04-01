@@ -9,9 +9,12 @@ import com.navasmart.vda5050.vehicle.VehicleContext;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,16 +87,17 @@ public class MqttConnectionManager {
             connectProxyVehicles();
         }
 
-        // 连接共享 client（Server 模式订阅，或仅用于 Server 模式时）
-        MqttConnectOptions sharedOptions = buildBaseOptions();
-        sharedMqttClient.setCallback(inboundRouter);
-        sharedMqttClient.connect(sharedOptions);
-        log.info("Shared MQTT client connected to {}:{}",
-                properties.getMqtt().getHost(), properties.getMqtt().getPort());
+        // 连接共享 client（Server 模式需要，或 Proxy 未启用时作为默认 client）
+        if (properties.getServer().isEnabled() || !properties.getProxy().isEnabled()) {
+            MqttConnectOptions sharedOptions = buildBaseOptions();
+            sharedMqttClient.setCallback(inboundRouter);
+            sharedMqttClient.connect(sharedOptions);
+            log.info("Shared MQTT client connected to {}:{}",
+                    properties.getMqtt().getHost(), properties.getMqtt().getPort());
 
-        // Server 模式：通过共享 client 订阅 AGV 上报的消息
-        if (properties.getServer().isEnabled()) {
-            subscribeServerTopics(sharedMqttClient);
+            if (properties.getServer().isEnabled()) {
+                subscribeServerTopics(sharedMqttClient);
+            }
         }
     }
 
@@ -117,7 +121,7 @@ public class MqttConnectionManager {
             MqttConnectOptions vehicleOptions = buildBaseOptions();
             setLwt(vehicleOptions, ctx);
 
-            vehicleClient.setCallback(inboundRouter);
+            vehicleClient.setCallback(new VehicleClientCallback(ctx.getVehicleId(), inboundRouter));
             vehicleClient.connect(vehicleOptions);
             ctx.setProxyMqttClient(vehicleClient);
 
@@ -232,5 +236,35 @@ public class MqttConnectionManager {
      */
     public boolean isConnected() {
         return sharedMqttClient.isConnected();
+    }
+
+    /**
+     * Per-vehicle client 的轻量 callback：消息转发到共享 InboundRouter，
+     * connectionLost 独立记录日志，不触发共享 router 的 connectionLostListeners。
+     */
+    private static class VehicleClientCallback implements MqttCallback {
+
+        private final String vehicleId;
+        private final MqttInboundRouter inboundRouter;
+
+        VehicleClientCallback(String vehicleId, MqttInboundRouter inboundRouter) {
+            this.vehicleId = vehicleId;
+            this.inboundRouter = inboundRouter;
+        }
+
+        @Override
+        public void connectionLost(Throwable cause) {
+            log.warn("Proxy vehicle {} MQTT connection lost: {}", vehicleId, cause.getMessage());
+        }
+
+        @Override
+        public void messageArrived(String topic, MqttMessage message) throws Exception {
+            inboundRouter.messageArrived(topic, message);
+        }
+
+        @Override
+        public void deliveryComplete(IMqttDeliveryToken token) {
+            // 无需处理
+        }
     }
 }
