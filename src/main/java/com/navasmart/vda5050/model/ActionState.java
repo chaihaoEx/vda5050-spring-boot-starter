@@ -2,6 +2,8 @@ package com.navasmart.vda5050.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.util.Objects;
+
 /**
  * VDA5050 动作执行状态（ActionState）。
  * <p>
@@ -52,4 +54,17 @@ public class ActionState {
 
     public String getResultDescription() { return resultDescription; }
     public void setResultDescription(String resultDescription) { this.resultDescription = resultDescription; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        ActionState that = (ActionState) o;
+        return Objects.equals(actionId, that.actionId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(actionId);
+    }
 }

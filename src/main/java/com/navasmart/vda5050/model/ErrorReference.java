@@ -1,6 +1,7 @@
 package com.navasmart.vda5050.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Objects;
 
 /**
  * VDA5050 错误引用信息。
@@ -37,4 +38,17 @@ public class ErrorReference {
 
     public String getReferenceValue() { return referenceValue; }
     public void setReferenceValue(String referenceValue) { this.referenceValue = referenceValue; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        ErrorReference that = (ErrorReference) o;
+        return Objects.equals(referenceKey, that.referenceKey) && Objects.equals(referenceValue, that.referenceValue);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(referenceKey, referenceValue);
+    }
 }

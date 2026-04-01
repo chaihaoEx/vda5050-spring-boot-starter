@@ -1,6 +1,7 @@
 package com.navasmart.vda5050.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Objects;
 
 /**
  * VDA5050 动作参数（ActionParameter）。
@@ -29,4 +30,17 @@ public class ActionParameter {
 
     public String getValue() { return value; }
     public void setValue(String value) { this.value = value; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        ActionParameter that = (ActionParameter) o;
+        return Objects.equals(key, that.key);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(key);
+    }
 }
