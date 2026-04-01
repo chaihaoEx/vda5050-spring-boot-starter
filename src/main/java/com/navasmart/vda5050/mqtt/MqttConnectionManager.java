@@ -160,11 +160,21 @@ public class MqttConnectionManager {
 
         MqttClient vehicleClient = new MqttClient(serverUri, clientId, new MemoryPersistence());
 
-        MqttConnectOptions vehicleOptions = buildBaseOptions();
-        setLwt(vehicleOptions, ctx);
+        try {
+            MqttConnectOptions vehicleOptions = buildBaseOptions();
+            setLwt(vehicleOptions, ctx);
 
-        vehicleClient.setCallback(new VehicleClientCallback(ctx.getVehicleId(), inboundRouter, this, ctx));
-        vehicleClient.connect(vehicleOptions);
+            vehicleClient.setCallback(new VehicleClientCallback(ctx.getVehicleId(), inboundRouter, this, ctx));
+            vehicleClient.connect(vehicleOptions);
+        } catch (MqttException e) {
+            try {
+                vehicleClient.close();
+            } catch (MqttException ce) {
+                log.warn("Failed to close MQTT client after connect failure for {}: {}",
+                        ctx.getVehicleId(), ce.getMessage());
+            }
+            throw e;
+        }
         ctx.setProxyMqttClient(vehicleClient);
 
         subscribeProxyTopics(vehicleClient, ctx);

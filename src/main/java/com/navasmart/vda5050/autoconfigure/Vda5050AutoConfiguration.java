@@ -70,11 +70,15 @@ public class Vda5050AutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public MqttClient mqttClient(Vda5050Properties properties) throws MqttException {
+    public MqttClient mqttClient(Vda5050Properties properties) {
         Vda5050Properties.MqttConfig mqtt = properties.getMqtt();
         String serverUri = mqtt.resolveScheme() + "://" + mqtt.getHost() + ":" + mqtt.getPort();
         String clientId = mqtt.getClientIdPrefix() + "-" + System.currentTimeMillis();
-        return new MqttClient(serverUri, clientId, new MemoryPersistence());
+        try {
+            return new MqttClient(serverUri, clientId, new MemoryPersistence());
+        } catch (MqttException e) {
+            throw new IllegalStateException("Failed to create MQTT client: " + e.getMessage(), e);
+        }
     }
 
     /**
