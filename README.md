@@ -18,7 +18,7 @@
 <dependency>
     <groupId>com.navasmart</groupId>
     <artifactId>vda5050-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -154,7 +154,7 @@ public class MyDispatchService {
 ./mvnw test -Dtest=ProxyOrderFlowTest  # 运行单个测试类
 ```
 
-项目包含 60 个测试（单元测试 + 集成测试），集成测试使用 Moquette 嵌入式 MQTT Broker，无需外部依赖。
+项目包含 97 个测试（单元测试 + 集成测试），集成测试使用 Moquette 嵌入式 MQTT Broker，无需外部依赖。
 
 ## 配置参考
 
