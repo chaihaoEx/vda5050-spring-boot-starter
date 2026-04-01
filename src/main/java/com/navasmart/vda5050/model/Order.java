@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * VDA5050 订单消息（Order）。
@@ -74,8 +75,21 @@ public class Order {
     public void setZoneSetId(String zoneSetId) { this.zoneSetId = zoneSetId; }
 
     public List<Node> getNodes() { return nodes; }
-    public void setNodes(List<Node> nodes) { this.nodes = nodes; }
+    public void setNodes(List<Node> nodes) { this.nodes = nodes != null ? new ArrayList<>(nodes) : new ArrayList<>(); }
 
     public List<Edge> getEdges() { return edges; }
-    public void setEdges(List<Edge> edges) { this.edges = edges; }
+    public void setEdges(List<Edge> edges) { this.edges = edges != null ? new ArrayList<>(edges) : new ArrayList<>(); }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        Order that = (Order) o;
+        return orderUpdateId == that.orderUpdateId && Objects.equals(orderId, that.orderId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(orderId, orderUpdateId);
+    }
 }

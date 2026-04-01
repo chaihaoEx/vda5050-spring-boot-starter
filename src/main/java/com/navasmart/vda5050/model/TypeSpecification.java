@@ -77,8 +77,12 @@ public class TypeSpecification {
     public void setMaxLoadMass(Double maxLoadMass) { this.maxLoadMass = maxLoadMass; }
 
     public List<String> getLocalizationTypes() { return localizationTypes; }
-    public void setLocalizationTypes(List<String> localizationTypes) { this.localizationTypes = localizationTypes; }
+    public void setLocalizationTypes(List<String> localizationTypes) {
+        this.localizationTypes = localizationTypes != null ? new ArrayList<>(localizationTypes) : new ArrayList<>();
+    }
 
     public List<String> getNavigationTypes() { return navigationTypes; }
-    public void setNavigationTypes(List<String> navigationTypes) { this.navigationTypes = navigationTypes; }
+    public void setNavigationTypes(List<String> navigationTypes) {
+        this.navigationTypes = navigationTypes != null ? new ArrayList<>(navigationTypes) : new ArrayList<>();
+    }
 }

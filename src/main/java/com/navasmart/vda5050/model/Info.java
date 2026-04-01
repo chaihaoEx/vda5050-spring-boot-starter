@@ -55,7 +55,9 @@ public class Info {
     public void setInfoType(String infoType) { this.infoType = infoType; }
 
     public List<InfoReference> getInfoReferences() { return infoReferences; }
-    public void setInfoReferences(List<InfoReference> infoReferences) { this.infoReferences = infoReferences; }
+    public void setInfoReferences(List<InfoReference> infoReferences) {
+        this.infoReferences = infoReferences != null ? new ArrayList<>(infoReferences) : new ArrayList<>();
+    }
 
     public String getInfoDescription() { return infoDescription; }
     public void setInfoDescription(String infoDescription) { this.infoDescription = infoDescription; }

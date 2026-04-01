@@ -29,8 +29,10 @@ public class Trajectory {
     public void setDegree(int degree) { this.degree = degree; }
 
     public List<Double> getKnotVector() { return knotVector; }
-    public void setKnotVector(List<Double> knotVector) { this.knotVector = knotVector; }
+    public void setKnotVector(List<Double> knotVector) { this.knotVector = knotVector != null ? new ArrayList<>(knotVector) : new ArrayList<>(); }
 
     public List<ControlPoint> getControlPoints() { return controlPoints; }
-    public void setControlPoints(List<ControlPoint> controlPoints) { this.controlPoints = controlPoints; }
+    public void setControlPoints(List<ControlPoint> controlPoints) {
+        this.controlPoints = controlPoints != null ? new ArrayList<>(controlPoints) : new ArrayList<>();
+    }
 }

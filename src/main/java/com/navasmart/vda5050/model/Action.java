@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * VDA5050 动作定义（Action）。
@@ -55,5 +56,20 @@ public class Action {
     public void setBlockingType(String blockingType) { this.blockingType = blockingType; }
 
     public List<ActionParameter> getActionParameters() { return actionParameters; }
-    public void setActionParameters(List<ActionParameter> actionParameters) { this.actionParameters = actionParameters; }
+    public void setActionParameters(List<ActionParameter> actionParameters) {
+        this.actionParameters = actionParameters != null ? new ArrayList<>(actionParameters) : new ArrayList<>();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (o == null || getClass() != o.getClass()) { return false; }
+        Action that = (Action) o;
+        return Objects.equals(actionId, that.actionId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(actionId);
+    }
 }
