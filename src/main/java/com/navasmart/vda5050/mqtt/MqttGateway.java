@@ -66,10 +66,10 @@ public class MqttGateway {
     /**
      * 将 payload 序列化为 JSON 并通过指定 client 发布到目标 Topic。
      */
-    public void publish(MqttClient client, String topic, Object payload, int qos, boolean retained) {
+    public boolean publish(MqttClient client, String topic, Object payload, int qos, boolean retained) {
         if (!client.isConnected()) {
             log.debug("MQTT client not connected, skipping publish to {}", topic);
-            return;
+            return false;
         }
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(payload);
@@ -78,20 +78,23 @@ public class MqttGateway {
             message.setRetained(retained);
             client.publish(topic, message);
             recordPublishMetric(topic, "success");
+            return true;
         } catch (MqttException e) {
             log.error("Failed to publish to topic {}: {}", topic, e.getMessage(), e);
             recordPublishMetric(topic, "failure");
+            return false;
         } catch (Exception e) {
             log.error("Failed to serialize payload for topic {}: {}", topic, e.getMessage(), e);
             recordPublishMetric(topic, "failure");
+            return false;
         }
     }
 
     /**
      * 将 payload 序列化为 JSON 并通过共享 client 发布到目标 Topic。
      */
-    public void publish(String topic, Object payload, int qos, boolean retained) {
-        publish(sharedMqttClient, topic, payload, qos, retained);
+    public boolean publish(String topic, Object payload, int qos, boolean retained) {
+        return publish(sharedMqttClient, topic, payload, qos, retained);
     }
 
     private MqttClient resolveProxyClient(String manufacturer, String serialNumber) {
@@ -142,32 +145,32 @@ public class MqttGateway {
 
     // ============ Proxy 模式便捷方法 ============
 
-    public void publishState(String manufacturer, String serialNumber, AgvState state) {
+    public boolean publishState(String manufacturer, String serialNumber, AgvState state) {
         if (isRateLimited("state", manufacturer, serialNumber)) {
-            return;
+            return false;
         }
-        publish(resolveProxyClient(manufacturer, serialNumber),
+        return publish(resolveProxyClient(manufacturer, serialNumber),
                 topicResolver.stateTopic(manufacturer, serialNumber), state, 0, false);
     }
 
-    public void publishConnection(String manufacturer, String serialNumber, Connection connection) {
-        publish(resolveProxyClient(manufacturer, serialNumber),
+    public boolean publishConnection(String manufacturer, String serialNumber, Connection connection) {
+        return publish(resolveProxyClient(manufacturer, serialNumber),
                 topicResolver.connectionTopic(manufacturer, serialNumber), connection, 1, true);
     }
 
-    public void publishFactsheet(String manufacturer, String serialNumber, Factsheet factsheet) {
-        publish(resolveProxyClient(manufacturer, serialNumber),
+    public boolean publishFactsheet(String manufacturer, String serialNumber, Factsheet factsheet) {
+        return publish(resolveProxyClient(manufacturer, serialNumber),
                 topicResolver.factsheetTopic(manufacturer, serialNumber), factsheet, 0, false);
     }
 
     // ============ Server 模式便捷方法 ============
 
-    public void publishOrder(String manufacturer, String serialNumber, Order order) {
-        publish(topicResolver.orderTopic(manufacturer, serialNumber), order, 0, false);
+    public boolean publishOrder(String manufacturer, String serialNumber, Order order) {
+        return publish(topicResolver.orderTopic(manufacturer, serialNumber), order, 0, false);
     }
 
-    public void publishInstantActions(String manufacturer, String serialNumber,
-                                      InstantActions instantActions) {
-        publish(topicResolver.instantActionsTopic(manufacturer, serialNumber), instantActions, 0, false);
+    public boolean publishInstantActions(String manufacturer, String serialNumber,
+                                         InstantActions instantActions) {
+        return publish(topicResolver.instantActionsTopic(manufacturer, serialNumber), instantActions, 0, false);
     }
 }

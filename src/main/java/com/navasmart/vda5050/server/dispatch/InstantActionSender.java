@@ -71,7 +71,10 @@ public class InstantActionSender {
         msg.setSerialNumber(ctx.getSerialNumber());
         msg.setInstantActions(actions);
 
-        mqttGateway.publishInstantActions(ctx.getManufacturer(), ctx.getSerialNumber(), msg);
+        boolean published = mqttGateway.publishInstantActions(ctx.getManufacturer(), ctx.getSerialNumber(), msg);
+        if (!published) {
+            return SendResult.failure("Failed to publish instant actions via MQTT");
+        }
         log.info("Sent {} instant action(s) to vehicle {}", actions.size(), vehicleId);
         return SendResult.success();
     }
