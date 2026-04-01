@@ -6,6 +6,8 @@ import com.navasmart.vda5050.model.Connection;
 import com.navasmart.vda5050.model.Factsheet;
 import com.navasmart.vda5050.model.InstantActions;
 import com.navasmart.vda5050.model.Order;
+import com.navasmart.vda5050.vehicle.VehicleContext;
+import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -23,6 +25,11 @@ import org.springframework.stereotype.Component;
  *       确保 Broker 持久保存最新连接状态，新订阅者可立即获取</li>
  * </ul>
  *
+ * <h2>多车 LWT 支持</h2>
+ * <p>Proxy 模式下每辆车拥有独立的 {@link MqttClient}，存储在 {@link VehicleContext#getProxyMqttClient()}。
+ * 发布 state/connection/factsheet 时，优先使用车辆专属 client，确保每辆车的 LWT 独立生效。
+ * Server 模式（publishOrder/publishInstantActions）使用共享 client。</p>
+ *
  * <p>所有 payload 通过 Jackson {@link ObjectMapper} 序列化为 JSON 字节数组后发布。</p>
  */
 @Component
@@ -30,27 +37,30 @@ public class MqttGateway {
 
     private static final Logger log = LoggerFactory.getLogger(MqttGateway.class);
 
-    private final MqttClient mqttClient;
+    private final MqttClient sharedMqttClient;
     private final ObjectMapper objectMapper;
     private final MqttTopicResolver topicResolver;
+    private final VehicleRegistry vehicleRegistry;
 
     public MqttGateway(MqttClient mqttClient, ObjectMapper objectMapper,
-                       MqttTopicResolver topicResolver) {
-        this.mqttClient = mqttClient;
+                       MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry) {
+        this.sharedMqttClient = mqttClient;
         this.objectMapper = objectMapper;
         this.topicResolver = topicResolver;
+        this.vehicleRegistry = vehicleRegistry;
     }
 
     /**
-     * 将 payload 序列化为 JSON 并发布到指定 MQTT Topic。
+     * 将 payload 序列化为 JSON 并通过指定 client 发布到目标 Topic。
      *
+     * @param client   MQTT 客户端
      * @param topic    目标 MQTT Topic
      * @param payload  消息体对象，将通过 Jackson 序列化为 JSON
      * @param qos      MQTT QoS 级别（0 或 1）
      * @param retained 是否设置为保留消息
      */
-    public void publish(String topic, Object payload, int qos, boolean retained) {
-        if (!mqttClient.isConnected()) {
+    public void publish(MqttClient client, String topic, Object payload, int qos, boolean retained) {
+        if (!client.isConnected()) {
             log.debug("MQTT client not connected, skipping publish to {}", topic);
             return;
         }
@@ -59,7 +69,7 @@ public class MqttGateway {
             MqttMessage message = new MqttMessage(bytes);
             message.setQos(qos);
             message.setRetained(retained);
-            mqttClient.publish(topic, message);
+            client.publish(topic, message);
         } catch (MqttException e) {
             log.error("Failed to publish to topic {}: {}", topic, e.getMessage(), e);
         } catch (Exception e) {
@@ -67,21 +77,47 @@ public class MqttGateway {
         }
     }
 
+    /**
+     * 将 payload 序列化为 JSON 并通过共享 client 发布到目标 Topic。
+     *
+     * @param topic    目标 MQTT Topic
+     * @param payload  消息体对象，将通过 Jackson 序列化为 JSON
+     * @param qos      MQTT QoS 级别（0 或 1）
+     * @param retained 是否设置为保留消息
+     */
+    public void publish(String topic, Object payload, int qos, boolean retained) {
+        publish(sharedMqttClient, topic, payload, qos, retained);
+    }
+
+    /**
+     * 解析 Proxy 车辆的专属 client；若无专属 client 则回退到共享 client。
+     */
+    private MqttClient resolveProxyClient(String manufacturer, String serialNumber) {
+        VehicleContext ctx = vehicleRegistry.get(manufacturer, serialNumber);
+        if (ctx != null && ctx.getProxyMqttClient() != null) {
+            return ctx.getProxyMqttClient();
+        }
+        return sharedMqttClient;
+    }
+
     // ============ Proxy 模式便捷方法 ============
 
     /**
      * 发布 AGV 状态消息（QoS 0，非保留）。
+     * 使用该车辆的专属 MQTT client，以确保 LWT 正确关联。
      *
      * @param manufacturer 制造商名称
      * @param serialNumber 车辆序列号
      * @param state        AGV 状态对象
      */
     public void publishState(String manufacturer, String serialNumber, AgvState state) {
-        publish(topicResolver.stateTopic(manufacturer, serialNumber), state, 0, false);
+        publish(resolveProxyClient(manufacturer, serialNumber),
+                topicResolver.stateTopic(manufacturer, serialNumber), state, 0, false);
     }
 
     /**
      * 发布连接状态消息（QoS 1，保留消息）。
+     * 使用该车辆的专属 MQTT client，以确保 LWT 正确关联。
      *
      * <p>使用 QoS 1 确保消息可靠送达，retained=true 使 Broker 保留最新连接状态。</p>
      *
@@ -90,18 +126,21 @@ public class MqttGateway {
      * @param connection   连接状态对象
      */
     public void publishConnection(String manufacturer, String serialNumber, Connection connection) {
-        publish(topicResolver.connectionTopic(manufacturer, serialNumber), connection, 1, true);
+        publish(resolveProxyClient(manufacturer, serialNumber),
+                topicResolver.connectionTopic(manufacturer, serialNumber), connection, 1, true);
     }
 
     /**
      * 发布 Factsheet 消息（QoS 0，非保留）。
+     * 使用该车辆的专属 MQTT client，以确保 LWT 正确关联。
      *
      * @param manufacturer 制造商名称
      * @param serialNumber 车辆序列号
      * @param factsheet    Factsheet 对象
      */
     public void publishFactsheet(String manufacturer, String serialNumber, Factsheet factsheet) {
-        publish(topicResolver.factsheetTopic(manufacturer, serialNumber), factsheet, 0, false);
+        publish(resolveProxyClient(manufacturer, serialNumber),
+                topicResolver.factsheetTopic(manufacturer, serialNumber), factsheet, 0, false);
     }
 
     // ============ Server 模式便捷方法 ============

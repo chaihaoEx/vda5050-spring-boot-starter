@@ -99,8 +99,8 @@ public class Vda5050AutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public MqttGateway mqttGateway(MqttClient mqttClient, ObjectMapper vda5050ObjectMapper,
-                                    MqttTopicResolver topicResolver) {
-        return new MqttGateway(mqttClient, vda5050ObjectMapper, topicResolver);
+                                    MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry) {
+        return new MqttGateway(mqttClient, vda5050ObjectMapper, topicResolver, vehicleRegistry);
     }
 
     /**

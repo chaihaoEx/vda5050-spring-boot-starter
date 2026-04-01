@@ -144,8 +144,10 @@ class ProxyActionHandlerTest {
         @Bean
         public ProxyOrderExecutor proxyOrderExecutor(VehicleRegistry vehicleRegistry,
                                                       ErrorAggregator errorAggregator,
-                                                      ActionHandlerRegistry actionHandlerRegistry) {
-            return new ProxyOrderExecutor(vehicleRegistry, errorAggregator, actionHandlerRegistry, SHARED_ADAPTER);
+                                                      ActionHandlerRegistry actionHandlerRegistry,
+                                                      Vda5050Properties properties) {
+            return new ProxyOrderExecutor(vehicleRegistry, errorAggregator, actionHandlerRegistry,
+                    SHARED_ADAPTER, properties);
         }
 
         @Bean
