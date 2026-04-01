@@ -129,10 +129,12 @@ public class ProxyOrderExecutor {
             List<Node> nodes = order.getNodes();
 
             if (nodes == null || nodeIndex >= nodes.size()) {
-                // 所有节点已处理完毕，订单完成，状态转为 IDLE
-                log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
-                ctx.setClientState(ProxyClientState.IDLE);
-                ctx.getAgvState().setDriving(false);
+                // 所有节点已遍历，但需等待所有 action（含 edge action）到达终态
+                if (allActionsTerminal(ctx)) {
+                    log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
+                    ctx.setClientState(ProxyClientState.IDLE);
+                    ctx.getAgvState().setDriving(false);
+                }
                 return;
             }
 
@@ -346,10 +348,13 @@ public class ProxyOrderExecutor {
         ctx.setCurrentNodeIndex(nextIndex);
 
         if (nextIndex >= nodeList.size()) {
-            // Order complete
-            ctx.setClientState(ProxyClientState.IDLE);
-            ctx.getAgvState().setDriving(false);
-            log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
+            // 所有节点已遍历；如果所有 action（含 edge action）均已终态，标记完成
+            // 否则留待下一轮 executeForVehicle 循环检查
+            if (allActionsTerminal(ctx)) {
+                ctx.setClientState(ProxyClientState.IDLE);
+                ctx.getAgvState().setDriving(false);
+                log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
+            }
             return;
         }
 
@@ -420,6 +425,20 @@ public class ProxyOrderExecutor {
         vehicleAdapter.onNavigationCancel(ctx.getVehicleId());
         ctx.setClientState(ProxyClientState.IDLE);
         ctx.getAgvState().setDriving(false);
+        ctx.setNavigationStartTime(0);
+        ctx.getActionStartTimes().clear();
+    }
+
+    /**
+     * 检查车辆当前所有 actionStates（含 node action 和 edge action）是否均已到达终态。
+     */
+    private boolean allActionsTerminal(VehicleContext ctx) {
+        return ctx.getAgvState().getActionStates().stream()
+                .allMatch(as -> {
+                    String s = as.getActionStatus();
+                    return ActionStatus.FINISHED.getValue().equals(s)
+                            || ActionStatus.FAILED.getValue().equals(s);
+                });
     }
 
     private ActionState findActionState(VehicleContext ctx, String actionId) {

@@ -61,14 +61,14 @@ Registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfi
 
 ### MQTT Layer (`mqtt/`, 4 files)
 - `MqttTopicResolver`: builds topic paths `{interfaceName}/{majorVersion}/{manufacturer}/{serialNumber}/{topicName}`
-- `MqttGateway`: publish with QoS/retain. Proxy publishes state/connection/factsheet; Server publishes order/instantActions.
+- `MqttGateway`: publish with QoS/retain. Proxy publishes state/connection/factsheet via per-vehicle client; Server publishes order/instantActions via shared client. `resolveProxyClient()` picks the right client.
 - `MqttInboundRouter`: implements `MqttCallback`, routes by topic suffix to registered `BiConsumer` handlers
-- `MqttConnectionManager`: lifecycle management, auto-reconnect, LWT setup, topic subscriptions at `@PostConstruct`
+- `MqttConnectionManager`: multi-client architecture — each Proxy vehicle gets a dedicated `MqttClient` (stored in `VehicleContext.proxyMqttClient`) with its own LWT; Server mode uses a shared `MqttClient`. Lifecycle: `@PostConstruct` connects all clients + subscribes topics, `@PreDestroy` disconnects all.
 
 ### Proxy Mode (`proxy/`, 12 files)
 - **User implements**: `Vda5050ProxyVehicleAdapter` (onNavigate, onActionExecute returning CompletableFuture, onPause/onResume/onOrderCancel) and `Vda5050ProxyStateProvider` (getVehicleStatus, getFactsheet). Optionally implement `ActionHandler` for custom action types.
 - `ProxyOrderStateMachine`: receives Order/InstantActions, manages IDLE→RUNNING↔PAUSED transitions, handles built-in actions (cancelOrder, startPause, stopPause, factsheetRequest)
-- `ProxyOrderExecutor`: `@Scheduled(fixedDelay=200ms)` loop iterating proxy vehicles, processing nodes with BlockingType dispatch (HARD=exclusive, SOFT=no driving, NONE=parallel)
+- `ProxyOrderExecutor`: `@Scheduled(fixedDelay=200ms)` loop iterating proxy vehicles, processing nodes with BlockingType dispatch (HARD=exclusive, SOFT=no driving, NONE=parallel). Enforces navigation timeout (`navigationTimeoutMs`) and action timeout (`actionTimeoutMs`). Also starts edge actions when traversing edges.
 - `ProxyHeartbeatScheduler`: `@Scheduled` publishes AgvState per vehicle, merging FMS status from StateProvider
 - `ProxyConnectionPublisher`: publishes ONLINE at `@PostConstruct`, OFFLINE at `@PreDestroy`
 
@@ -80,13 +80,13 @@ Registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfi
 - `ServerConnectionMonitor`: `@Scheduled` timeout detection, processes Connection messages
 
 ### Thread Safety (`vehicle/`, 2 files)
-- `VehicleContext`: per-vehicle state container with `ReentrantLock`. Holds proxy state (agvState, currentOrder, clientState, nodeIndex) and server state (lastReceivedState, lastSentOrder, connectionState). AtomicInteger header ID generators.
+- `VehicleContext`: per-vehicle state container with `ReentrantLock`. Holds proxy state (agvState, currentOrder, clientState, nodeIndex, proxyMqttClient, navigationStartTime, actionStartTimes) and server state (lastReceivedState, lastSentOrder, connectionState). AtomicInteger header ID generators.
 - `VehicleRegistry`: `ConcurrentHashMap<String, VehicleContext>`, key format `"{manufacturer}:{serialNumber}"`. Initialized from config at `@PostConstruct`.
 - Lock rule: acquire per-vehicle lock for state mutations; release before I/O (MQTT publish).
 
 ## Key Design Decisions
 
-- MQTT QoS 0 for all topics except `/connection` (QoS 1, retained) which uses LWT for disconnect detection
+- MQTT QoS 0 for all topics except `/connection` (QoS 1, retained) which uses LWT for disconnect detection. Each Proxy vehicle has a dedicated MqttClient with its own LWT, solving the Paho single-LWT limitation.
 - Orders use VDA5050's horizon concept: nodes/edges have `released` flag distinguishing committed vs preview segments
 - Error aggregation in Proxy mode: WARNING (non-fatal) vs FATAL (triggers order abort)
 - Order completion in Server mode: all nodes passed + driving=false + all actions terminal
@@ -94,4 +94,4 @@ Registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfi
 
 ## Design Documentation
 
-12 specification documents in `docs/` covering architecture, data models, MQTT communication, callback interfaces, state machine, action handler, server interfaces, order dispatch, multi-vehicle management, configuration, error handling, and integration guide.
+14 documents in `docs/` covering architecture, data models, MQTT communication, callback interfaces, state machine, action handler, server interfaces, order dispatch, multi-vehicle management, configuration, error handling, integration guide, proxy quick start, and improvement roadmap.
