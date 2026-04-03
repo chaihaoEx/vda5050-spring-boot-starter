@@ -9,6 +9,7 @@ import com.navasmart.vda5050.model.Node;
 import com.navasmart.vda5050.model.NodeState;
 import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.model.enums.ActionStatus;
+import com.navasmart.vda5050.model.enums.ErrorLevel;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.server.callback.SendResult;
 import com.navasmart.vda5050.server.callback.Vda5050ServerAdapter;
@@ -131,14 +132,21 @@ class Phase5HardeningTest {
         MqttGateway gateway = mock(MqttGateway.class);
         Vda5050Properties props = new Vda5050Properties();
 
-        OrderDispatcher dispatcher = new OrderDispatcher(registry, gateway, props, errorAggregator);
+        OrderDispatcher dispatcher = new OrderDispatcher(registry, gateway, props);
 
-        // Add a fatal error
-        ctx.lock();
+        // Simulate AGV reporting a FATAL error via lastReceivedState (server-mode path)
+        AgvState receivedState = new AgvState();
+        com.navasmart.vda5050.model.Error fatalError = new com.navasmart.vda5050.model.Error();
+        fatalError.setErrorLevel(ErrorLevel.FATAL.getValue());
+        fatalError.setErrorType("navigationError");
+        fatalError.setErrorDescription("Navigation failed");
+        receivedState.setErrors(new ArrayList<>(List.of(fatalError)));
+
+        ctx.lockServer();
         try {
-            errorAggregator.addFatalError(ctx, "Navigation failed", "navigationError");
+            ctx.setLastReceivedState(receivedState);
         } finally {
-            ctx.unlock();
+            ctx.unlockServer();
         }
 
         Order order = new Order();
@@ -163,7 +171,7 @@ class Phase5HardeningTest {
         Vda5050Properties props = new Vda5050Properties();
         props.getMqtt().setProtocolVersion("2.0.0");
 
-        OrderDispatcher dispatcher = new OrderDispatcher(registry, gateway, props, errorAggregator);
+        OrderDispatcher dispatcher = new OrderDispatcher(registry, gateway, props);
 
         Order order = new Order();
         order.setOrderId("order-1");
@@ -239,7 +247,7 @@ class Phase5HardeningTest {
         Vda5050Properties props = new Vda5050Properties();
         props.getMqtt().setProtocolVersion("2.0.0");
 
-        OrderDispatcher dispatcher = new OrderDispatcher(registry, gateway, props, errorAggregator);
+        OrderDispatcher dispatcher = new OrderDispatcher(registry, gateway, props);
 
         // Mark order-1 as completed
         ctx.addCompletedOrderId("order-1");

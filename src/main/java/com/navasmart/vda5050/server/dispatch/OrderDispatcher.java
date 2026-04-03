@@ -1,8 +1,9 @@
 package com.navasmart.vda5050.server.dispatch;
 
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
-import com.navasmart.vda5050.error.ErrorAggregator;
+import com.navasmart.vda5050.model.AgvState;
 import com.navasmart.vda5050.model.Order;
+import com.navasmart.vda5050.model.enums.ErrorLevel;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.server.callback.SendResult;
 import com.navasmart.vda5050.util.TimestampUtil;
@@ -31,14 +32,12 @@ public class OrderDispatcher {
     private final VehicleRegistry vehicleRegistry;
     private final MqttGateway mqttGateway;
     private final Vda5050Properties properties;
-    private final ErrorAggregator errorAggregator;
 
     public OrderDispatcher(VehicleRegistry vehicleRegistry, MqttGateway mqttGateway,
-                           Vda5050Properties properties, ErrorAggregator errorAggregator) {
+                           Vda5050Properties properties) {
         this.vehicleRegistry = vehicleRegistry;
         this.mqttGateway = mqttGateway;
         this.properties = properties;
-        this.errorAggregator = errorAggregator;
     }
 
     /**
@@ -57,17 +56,13 @@ public class OrderDispatcher {
             return SendResult.failure("Vehicle not registered: " + vehicleId);
         }
 
-        ctx.lock();
-        try {
-            if (errorAggregator.hasFatalError(ctx)) {
-                return SendResult.failure("Vehicle " + vehicleId + " has FATAL error, refusing to send order");
-            }
-        } finally {
-            ctx.unlock();
-        }
-
         ctx.lockServer();
         try {
+            AgvState receivedState = ctx.getLastReceivedState();
+            if (receivedState != null && hasFatalError(receivedState)) {
+                return SendResult.failure("Vehicle " + vehicleId + " has FATAL error, refusing to send order");
+            }
+
             order.setHeaderId(ctx.nextOrderHeaderId());
             order.setTimestamp(TimestampUtil.now());
             order.setVersion(properties.getMqtt().getProtocolVersion());
@@ -115,5 +110,10 @@ public class OrderDispatcher {
         }
 
         return sendOrder(vehicleId, orderUpdate);
+    }
+
+    private boolean hasFatalError(AgvState state) {
+        return state.getErrors().stream()
+                .anyMatch(e -> ErrorLevel.FATAL.getValue().equals(e.getErrorLevel()));
     }
 }
