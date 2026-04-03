@@ -43,6 +43,8 @@ public class MqttHealthIndicator implements HealthIndicator {
         if (hasServerVehicles) {
             boolean sharedConnected = connectionManager.isConnected();
             details.put("sharedClient", sharedConnected ? "connected" : "disconnected");
+            details.put("sharedClient.consecutiveDisconnects",
+                    String.valueOf(connectionManager.getConsecutiveDisconnects()));
             if (!sharedConnected) {
                 anyDown = true;
             }
@@ -52,7 +54,9 @@ public class MqttHealthIndicator implements HealthIndicator {
         for (VehicleContext ctx : vehicleRegistry.getProxyVehicles()) {
             MqttClient vehicleClient = ctx.getProxyMqttClient();
             boolean connected = vehicleClient != null && vehicleClient.isConnected();
-            details.put("proxy:" + ctx.getVehicleId(), connected ? "connected" : "disconnected");
+            String prefix = "proxy:" + ctx.getVehicleId();
+            details.put(prefix, connected ? "connected" : "disconnected");
+            details.put(prefix + ".reconnectAttempts", String.valueOf(ctx.getReconnectAttempts()));
             if (!connected) {
                 anyDown = true;
             }

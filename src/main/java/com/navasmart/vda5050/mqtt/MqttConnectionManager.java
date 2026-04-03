@@ -341,6 +341,13 @@ public class MqttConnectionManager {
     }
 
     /**
+     * 获取共享 client 的连续断连次数（成功重连后重置为 0）。
+     */
+    public int getConsecutiveDisconnects() {
+        return consecutiveDisconnects.get();
+    }
+
+    /**
      * Per-vehicle client 的回调：消息转发到共享 InboundRouter，
      * 重连后自动重新订阅 Proxy Topic，断连时执行断路器逻辑。
      */
@@ -350,7 +357,6 @@ public class MqttConnectionManager {
         private final MqttInboundRouter inboundRouter;
         private final MqttConnectionManager connectionManager;
         private final VehicleContext vehicleContext;
-        private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
 
         VehicleClientCallback(String vehicleId, MqttInboundRouter inboundRouter,
                               MqttConnectionManager connectionManager, VehicleContext vehicleContext) {
@@ -363,7 +369,7 @@ public class MqttConnectionManager {
         @Override
         public void connectComplete(boolean reconnect, String serverURI) {
             if (reconnect) {
-                reconnectAttempts.set(0);
+                vehicleContext.resetReconnectAttempts();
                 log.info("Proxy vehicle {} reconnected to {}", vehicleId, serverURI);
                 MqttClient client = vehicleContext.getProxyMqttClient();
                 if (client != null) {
@@ -382,7 +388,7 @@ public class MqttConnectionManager {
             log.warn("Proxy vehicle {} MQTT connection lost: {}", vehicleId, cause.getMessage());
             int maxAttempts = connectionManager.properties.getMqtt().getMaxReconnectAttempts();
             if (maxAttempts > 0) {
-                int attempts = reconnectAttempts.incrementAndGet();
+                int attempts = vehicleContext.incrementReconnectAttempts();
                 if (attempts >= maxAttempts) {
                     log.error("Max reconnect attempts ({}) reached for vehicle {}. Giving up.",
                             maxAttempts, vehicleId);
