@@ -141,7 +141,7 @@ public class AgvStateTracker {
         boolean hasFatalErrors = state.getErrors().stream()
                 .anyMatch(e -> ErrorLevel.FATAL.getValue().equals(e.getErrorLevel()));
 
-        String orderId = state.getOrderId();
+        String orderId = sentOrder.getOrderId();
         if (hasFailedActions || hasFatalErrors) {
             callbacks.add(() -> serverAdapter.onOrderFailed(vehicleId, orderId, state.getErrors()));
             events.add(new OrderFailedEvent(this, vehicleId, orderId, state.getErrors()));
