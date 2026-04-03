@@ -15,6 +15,7 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -103,7 +104,8 @@ public class Vda5050AutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public MqttGateway mqttGateway(MqttClient mqttClient, ObjectMapper vda5050ObjectMapper,
+    public MqttGateway mqttGateway(MqttClient mqttClient,
+                                    @Qualifier("vda5050ObjectMapper") ObjectMapper vda5050ObjectMapper,
                                     MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry,
                                     Vda5050Properties properties,
                                     ObjectProvider<MeterRegistry> meterRegistryProvider) {
@@ -121,7 +123,7 @@ public class Vda5050AutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
-    public MqttInboundRouter mqttInboundRouter(ObjectMapper vda5050ObjectMapper,
+    public MqttInboundRouter mqttInboundRouter(@Qualifier("vda5050ObjectMapper") ObjectMapper vda5050ObjectMapper,
                                                 MqttTopicResolver topicResolver,
                                                 VehicleRegistry vehicleRegistry) {
         return new MqttInboundRouter(vda5050ObjectMapper, topicResolver, vehicleRegistry);
@@ -145,7 +147,7 @@ public class Vda5050AutoConfiguration {
                                                         MqttTopicResolver topicResolver,
                                                         VehicleRegistry vehicleRegistry,
                                                         Vda5050Properties properties,
-                                                        ObjectMapper vda5050ObjectMapper,
+                                                        @Qualifier("vda5050ObjectMapper") ObjectMapper vda5050ObjectMapper,
                                                         MqttGateway mqttGateway) {
         return new MqttConnectionManager(mqttClient, inboundRouter, topicResolver,
                 vehicleRegistry, properties, vda5050ObjectMapper, mqttGateway);
