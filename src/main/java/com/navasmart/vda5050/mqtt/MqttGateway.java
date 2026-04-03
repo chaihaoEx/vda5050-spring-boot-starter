@@ -102,7 +102,8 @@ public class MqttGateway {
         if (ctx != null && ctx.getProxyMqttClient() != null) {
             return ctx.getProxyMqttClient();
         }
-        return sharedMqttClient;
+        log.warn("Proxy client not available for vehicle {}:{}, skipping publish", manufacturer, serialNumber);
+        return null;
     }
 
     /**
@@ -149,18 +150,27 @@ public class MqttGateway {
         if (isRateLimited("state", manufacturer, serialNumber)) {
             return false;
         }
-        return publish(resolveProxyClient(manufacturer, serialNumber),
-                topicResolver.stateTopic(manufacturer, serialNumber), state, 0, false);
+        MqttClient client = resolveProxyClient(manufacturer, serialNumber);
+        if (client == null) {
+            return false;
+        }
+        return publish(client, topicResolver.stateTopic(manufacturer, serialNumber), state, 0, false);
     }
 
     public boolean publishConnection(String manufacturer, String serialNumber, Connection connection) {
-        return publish(resolveProxyClient(manufacturer, serialNumber),
-                topicResolver.connectionTopic(manufacturer, serialNumber), connection, 1, true);
+        MqttClient client = resolveProxyClient(manufacturer, serialNumber);
+        if (client == null) {
+            return false;
+        }
+        return publish(client, topicResolver.connectionTopic(manufacturer, serialNumber), connection, 1, true);
     }
 
     public boolean publishFactsheet(String manufacturer, String serialNumber, Factsheet factsheet) {
-        return publish(resolveProxyClient(manufacturer, serialNumber),
-                topicResolver.factsheetTopic(manufacturer, serialNumber), factsheet, 0, false);
+        MqttClient client = resolveProxyClient(manufacturer, serialNumber);
+        if (client == null) {
+            return false;
+        }
+        return publish(client, topicResolver.factsheetTopic(manufacturer, serialNumber), factsheet, 0, false);
     }
 
     // ============ Server 模式便捷方法 ============
