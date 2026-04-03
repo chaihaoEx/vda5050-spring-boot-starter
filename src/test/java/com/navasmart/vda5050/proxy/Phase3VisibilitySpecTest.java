@@ -276,6 +276,49 @@ class Phase3VisibilitySpecTest {
     }
 
     @Test
+    void factsheetRequest_callsStateProviderOutsideLock() {
+        final boolean[] lockHeldDuringGetFactsheet = {false};
+        Vda5050ProxyStateProvider trackingProvider = new Vda5050ProxyStateProvider() {
+            @Override
+            public VehicleStatus getVehicleStatus(String vehicleId) {
+                return new VehicleStatus();
+            }
+            @Override
+            public Factsheet getFactsheet(String vehicleId) {
+                boolean acquired = false;
+                try {
+                    acquired = ctx.tryLock(0, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                if (!acquired) {
+                    lockHeldDuringGetFactsheet[0] = true;
+                } else {
+                    ctx.unlock();
+                }
+                return new Factsheet();
+            }
+        };
+
+        ProxyOrderStateMachine sm = new ProxyOrderStateMachine(
+                errorAggregator, vehicleAdapter, trackingProvider,
+                mqttGateway, eventPublisher, new OrderValidator());
+
+        InstantActions msg = new InstantActions();
+        Action fsAction = new Action();
+        fsAction.setActionId("fs-2");
+        fsAction.setActionType("factsheetRequest");
+        fsAction.setBlockingType(BlockingType.NONE.getValue());
+        msg.setInstantActions(List.of(fsAction));
+
+        sm.receiveInstantActions(ctx, msg);
+
+        assertThat(lockHeldDuringGetFactsheet[0])
+                .as("Lock should NOT be held during stateProvider.getFactsheet() callback")
+                .isFalse();
+    }
+
+    @Test
     void factsheetRequest_setsActionStatusFinished() {
         InstantActions msg = new InstantActions();
         Action fsAction = new Action();

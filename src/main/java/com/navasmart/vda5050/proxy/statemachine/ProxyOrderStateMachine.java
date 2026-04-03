@@ -159,7 +159,6 @@ public class ProxyOrderStateMachine {
      * @param instantActions 即时动作消息
      */
     public void receiveInstantActions(VehicleContext ctx, InstantActions instantActions) {
-        Factsheet pendingFactsheet = null;
         String manufacturer;
         String serialNumber;
         String vehicleId;
@@ -167,6 +166,7 @@ public class ProxyOrderStateMachine {
         boolean deferredCancel = false;
         boolean deferredPause = false;
         boolean deferredResume = false;
+        Action deferredFactsheetAction = null;
 
         ctx.lock();
         try {
@@ -175,14 +175,12 @@ public class ProxyOrderStateMachine {
             vehicleId = ctx.getVehicleId();
             for (Action action : instantActions.getInstantActions()) {
                 InstantActionResult result = processInstantAction(ctx, action);
-                if (result.factsheet != null) {
-                    pendingFactsheet = result.factsheet;
-                }
                 if (result.deferredCallback != null) {
                     switch (result.deferredCallback) {
                         case CANCEL -> deferredCancel = true;
                         case PAUSE -> deferredPause = true;
                         case RESUME -> deferredResume = true;
+                        case FACTSHEET -> deferredFactsheetAction = result.sourceAction;
                         default -> { }
                     }
                 }
@@ -201,19 +199,24 @@ public class ProxyOrderStateMachine {
         if (deferredResume) {
             vehicleAdapter.onResume(vehicleId);
         }
-        if (pendingFactsheet != null) {
-            mqttGateway.publishFactsheet(manufacturer, serialNumber, pendingFactsheet);
+        if (deferredFactsheetAction != null) {
+            handleFactsheetRequest(ctx, deferredFactsheetAction, manufacturer, serialNumber);
         }
     }
 
     /** Deferred callback type for adapter calls that must execute outside lock */
-    private enum DeferredCallback { CANCEL, PAUSE, RESUME }
+    private enum DeferredCallback { CANCEL, PAUSE, RESUME, FACTSHEET }
 
     /** Result of processing a single instant action — carries deferred work to execute outside lock */
-    private record InstantActionResult(Factsheet factsheet, DeferredCallback deferredCallback) {
-        static final InstantActionResult NONE = new InstantActionResult(null, null);
-        static InstantActionResult withCallback(DeferredCallback cb) { return new InstantActionResult(null, cb); }
-        static InstantActionResult withFactsheet(Factsheet fs) { return new InstantActionResult(fs, null); }
+    private record InstantActionResult(Factsheet factsheet, DeferredCallback deferredCallback,
+                                       Action sourceAction) {
+        static final InstantActionResult NONE = new InstantActionResult(null, null, null);
+        static InstantActionResult withCallback(DeferredCallback cb) {
+            return new InstantActionResult(null, cb, null);
+        }
+        static InstantActionResult withFactsheetRequest(Action action) {
+            return new InstantActionResult(null, DeferredCallback.FACTSHEET, action);
+        }
     }
 
     /**
@@ -327,8 +330,8 @@ public class ProxyOrderStateMachine {
             case "cancelOrder" -> { return handleCancelOrder(ctx, action); }
             case "startPause", "stopPause" -> { return handlePause(ctx, action, actionType); }
             case "factsheetRequest" -> {
-                Factsheet fs = handleFactsheetRequest(ctx, action);
-                return fs != null ? InstantActionResult.withFactsheet(fs) : InstantActionResult.NONE;
+                // Defer stateProvider.getFactsheet() to outside lock (user callback)
+                return InstantActionResult.withFactsheetRequest(action);
             }
             default -> {
                 // 非内置动作：添加到 actionStates 队列，由 ProxyOrderExecutor 在执行循环中处理
@@ -390,24 +393,43 @@ public class ProxyOrderStateMachine {
     }
 
     /**
-     * 处理 factsheetRequest：在锁内收集 Factsheet 数据并设置 header，返回待发布的 Factsheet。
-     * 实际 MQTT 发布由调用方在锁外执行。
+     * 处理 factsheetRequest：调用 stateProvider 和 MQTT publish 均在锁外执行。
+     * 仅在设置 actionState 时短暂获取锁。
      *
-     * @return 待发布的 Factsheet，无数据时返回 null
+     * @param ctx          车辆上下文
+     * @param action       factsheetRequest 动作
+     * @param manufacturer 制造商（锁外传入，避免重新获取锁）
+     * @param serialNumber 序列号（锁外传入）
      */
-    private Factsheet handleFactsheetRequest(VehicleContext ctx, Action action) {
+    private void handleFactsheetRequest(VehicleContext ctx, Action action,
+                                        String manufacturer, String serialNumber) {
         try {
+            // stateProvider.getFactsheet() 是用户回调，在锁外执行
             Factsheet factsheet = stateProvider.getFactsheet(ctx.getVehicleId());
             if (factsheet != null) {
+                // nextStateHeaderId() 基于 AtomicInteger，无需持锁
                 factsheet.setHeaderId(ctx.nextStateHeaderId());
-                factsheet.setManufacturer(ctx.getManufacturer());
-                factsheet.setSerialNumber(ctx.getSerialNumber());
+                factsheet.setManufacturer(manufacturer);
+                factsheet.setSerialNumber(serialNumber);
             }
-            addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
-            return factsheet;
+            // 短暂获取锁设置 actionState
+            ctx.lock();
+            try {
+                addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+            } finally {
+                ctx.unlock();
+            }
+            // MQTT publish 在锁外
+            if (factsheet != null) {
+                mqttGateway.publishFactsheet(manufacturer, serialNumber, factsheet);
+            }
         } catch (Exception e) {
-            addInstantActionState(ctx, action, ActionStatus.FAILED, e.getMessage());
-            return null;
+            ctx.lock();
+            try {
+                addInstantActionState(ctx, action, ActionStatus.FAILED, e.getMessage());
+            } finally {
+                ctx.unlock();
+            }
         }
     }
 

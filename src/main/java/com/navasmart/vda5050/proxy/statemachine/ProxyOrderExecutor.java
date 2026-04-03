@@ -359,6 +359,7 @@ public class ProxyOrderExecutor {
             try {
                 // 如果订单已被取消，忽略回调，避免覆盖已取消订单的状态
                 if (orderId != null && ctx.isCancelledOrder(orderId)) {
+                    ctx.removeCancelledOrderId(orderId);
                     return;
                 }
 
@@ -499,6 +500,7 @@ public class ProxyOrderExecutor {
             try {
                 // 如果订单已被取消，忽略导航结果，避免覆盖已取消订单的状态
                 if (ctx.isCancelledOrder(navOrderId)) {
+                    ctx.removeCancelledOrderId(navOrderId);
                     return;
                 }
 
