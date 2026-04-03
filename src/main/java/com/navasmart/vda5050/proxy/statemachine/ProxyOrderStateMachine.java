@@ -128,6 +128,7 @@ public class ProxyOrderStateMachine {
             ctx.setCurrentNodeIndex(0);
             ctx.setNextStopIndex(0);
             ctx.setReachedWaypoint(true);
+            ctx.clearCancelledOrderIds();
             initAgvState(ctx, order);
             ctx.setClientState(ProxyClientState.RUNNING);
             accepted = true;
@@ -158,13 +159,63 @@ public class ProxyOrderStateMachine {
      * @param instantActions 即时动作消息
      */
     public void receiveInstantActions(VehicleContext ctx, InstantActions instantActions) {
+        String manufacturer;
+        String serialNumber;
+        String vehicleId;
+        // Deferred adapter callbacks to execute outside lock
+        boolean deferredCancel = false;
+        boolean deferredPause = false;
+        boolean deferredResume = false;
+        Action deferredFactsheetAction = null;
+
         ctx.lock();
         try {
+            manufacturer = ctx.getManufacturer();
+            serialNumber = ctx.getSerialNumber();
+            vehicleId = ctx.getVehicleId();
             for (Action action : instantActions.getInstantActions()) {
-                processInstantAction(ctx, action);
+                InstantActionResult result = processInstantAction(ctx, action);
+                if (result.deferredCallback != null) {
+                    switch (result.deferredCallback) {
+                        case CANCEL -> deferredCancel = true;
+                        case PAUSE -> deferredPause = true;
+                        case RESUME -> deferredResume = true;
+                        case FACTSHEET -> deferredFactsheetAction = result.sourceAction;
+                        default -> { }
+                    }
+                }
             }
         } finally {
             ctx.unlock();
+        }
+
+        // Adapter callbacks and MQTT publish outside lock
+        if (deferredCancel) {
+            vehicleAdapter.onOrderCancel(vehicleId);
+        }
+        if (deferredPause) {
+            vehicleAdapter.onPause(vehicleId);
+        }
+        if (deferredResume) {
+            vehicleAdapter.onResume(vehicleId);
+        }
+        if (deferredFactsheetAction != null) {
+            handleFactsheetRequest(ctx, deferredFactsheetAction, manufacturer, serialNumber);
+        }
+    }
+
+    /** Deferred callback type for adapter calls that must execute outside lock */
+    private enum DeferredCallback { CANCEL, PAUSE, RESUME, FACTSHEET }
+
+    /** Result of processing a single instant action — carries deferred work to execute outside lock */
+    private record InstantActionResult(Factsheet factsheet, DeferredCallback deferredCallback,
+                                       Action sourceAction) {
+        static final InstantActionResult NONE = new InstantActionResult(null, null, null);
+        static InstantActionResult withCallback(DeferredCallback cb) {
+            return new InstantActionResult(null, cb, null);
+        }
+        static InstantActionResult withFactsheetRequest(Action action) {
+            return new InstantActionResult(null, DeferredCallback.FACTSHEET, action);
         }
     }
 
@@ -260,21 +311,28 @@ public class ProxyOrderStateMachine {
         errorAggregator.clearAllErrors(ctx);
     }
 
-    /** 处理单个即时动作：内置动作（cancelOrder 等）直接处理，其他加入 actionStates 由执行器异步处理 */
-    private void processInstantAction(VehicleContext ctx, Action action) {
+    /**
+     * 处理单个即时动作：内置动作（cancelOrder 等）直接处理，其他加入 actionStates 由执行器异步处理。
+     *
+     * @return 处理结果，包含需要在锁外执行的 adapter 回调和/或待发布的 Factsheet
+     */
+    private InstantActionResult processInstantAction(VehicleContext ctx, Action action) {
         // 检查重复的 actionId，避免重复处理同一动作
         for (ActionState as : ctx.getAgvState().getActionStates()) {
             if (as.getActionId().equals(action.getActionId())) {
-                return; // Already exists
+                return InstantActionResult.NONE;
             }
         }
 
         String actionType = action.getActionType();
         // 根据 actionType 分发处理：内置动作由状态机直接处理，自定义动作加入等待队列
         switch (actionType) {
-            case "cancelOrder" -> handleCancelOrder(ctx, action);
-            case "startPause", "stopPause" -> handlePause(ctx, action, actionType);
-            case "factsheetRequest" -> handleFactsheetRequest(ctx, action);
+            case "cancelOrder" -> { return handleCancelOrder(ctx, action); }
+            case "startPause", "stopPause" -> { return handlePause(ctx, action, actionType); }
+            case "factsheetRequest" -> {
+                // Defer stateProvider.getFactsheet() to outside lock (user callback)
+                return InstantActionResult.withFactsheetRequest(action);
+            }
             default -> {
                 // 非内置动作：添加到 actionStates 队列，由 ProxyOrderExecutor 在执行循环中处理
                 ActionState as = new ActionState();
@@ -285,29 +343,39 @@ public class ProxyOrderStateMachine {
                 ctx.getAgvState().getActionStates().add(as);
             }
         }
+        return InstantActionResult.NONE;
     }
 
-    private void handleCancelOrder(VehicleContext ctx, Action action) {
+    private InstantActionResult handleCancelOrder(VehicleContext ctx, Action action) {
         if (ctx.getClientState() == ProxyClientState.IDLE) {
             errorAggregator.addWarning(ctx, "No order to cancel", "noOrderToCancel", null);
             addInstantActionState(ctx, action, ActionStatus.FAILED, "No active order");
-            return;
+            return InstantActionResult.NONE;
         }
 
-        vehicleAdapter.onOrderCancel(ctx.getVehicleId());
+        // Record cancelled orderId to prevent async callbacks from overwriting state
+        Order currentOrder = ctx.getCurrentOrder();
+        if (currentOrder != null) {
+            ctx.addCancelledOrderId(currentOrder.getOrderId());
+        }
+
         ctx.setClientState(ProxyClientState.IDLE);
         ctx.setCurrentOrder(null);
+        ctx.clearActionStartTimes();
+        ctx.setNavigationStartTime(0);
         addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
         log.info("Vehicle {} order cancelled", ctx.getVehicleId());
+        // Adapter callback deferred to execute outside lock
+        return InstantActionResult.withCallback(DeferredCallback.CANCEL);
     }
 
-    private void handlePause(VehicleContext ctx, Action action, String actionType) {
+    private InstantActionResult handlePause(VehicleContext ctx, Action action, String actionType) {
         if ("startPause".equals(actionType)) {
             if (ctx.getClientState() == ProxyClientState.RUNNING) {
                 ctx.setClientState(ProxyClientState.PAUSED);
                 ctx.getAgvState().setPaused(true);
-                vehicleAdapter.onPause(ctx.getVehicleId());
                 addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+                return InstantActionResult.withCallback(DeferredCallback.PAUSE);
             } else {
                 addInstantActionState(ctx, action, ActionStatus.FAILED, "Not in RUNNING state");
             }
@@ -315,26 +383,53 @@ public class ProxyOrderStateMachine {
             if (ctx.getClientState() == ProxyClientState.PAUSED) {
                 ctx.setClientState(ProxyClientState.RUNNING);
                 ctx.getAgvState().setPaused(false);
-                vehicleAdapter.onResume(ctx.getVehicleId());
                 addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+                return InstantActionResult.withCallback(DeferredCallback.RESUME);
             } else {
                 addInstantActionState(ctx, action, ActionStatus.FAILED, "Not in PAUSED state");
             }
         }
+        return InstantActionResult.NONE;
     }
 
-    private void handleFactsheetRequest(VehicleContext ctx, Action action) {
+    /**
+     * 处理 factsheetRequest：调用 stateProvider 和 MQTT publish 均在锁外执行。
+     * 仅在设置 actionState 时短暂获取锁。
+     *
+     * @param ctx          车辆上下文
+     * @param action       factsheetRequest 动作
+     * @param manufacturer 制造商（锁外传入，避免重新获取锁）
+     * @param serialNumber 序列号（锁外传入）
+     */
+    private void handleFactsheetRequest(VehicleContext ctx, Action action,
+                                        String manufacturer, String serialNumber) {
         try {
+            // stateProvider.getFactsheet() 是用户回调，在锁外执行
             Factsheet factsheet = stateProvider.getFactsheet(ctx.getVehicleId());
             if (factsheet != null) {
+                // nextStateHeaderId() 基于 AtomicInteger，无需持锁
                 factsheet.setHeaderId(ctx.nextStateHeaderId());
-                factsheet.setManufacturer(ctx.getManufacturer());
-                factsheet.setSerialNumber(ctx.getSerialNumber());
-                mqttGateway.publishFactsheet(ctx.getManufacturer(), ctx.getSerialNumber(), factsheet);
+                factsheet.setManufacturer(manufacturer);
+                factsheet.setSerialNumber(serialNumber);
             }
-            addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+            // 短暂获取锁设置 actionState
+            ctx.lock();
+            try {
+                addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+            } finally {
+                ctx.unlock();
+            }
+            // MQTT publish 在锁外
+            if (factsheet != null) {
+                mqttGateway.publishFactsheet(manufacturer, serialNumber, factsheet);
+            }
         } catch (Exception e) {
-            addInstantActionState(ctx, action, ActionStatus.FAILED, e.getMessage());
+            ctx.lock();
+            try {
+                addInstantActionState(ctx, action, ActionStatus.FAILED, e.getMessage());
+            } finally {
+                ctx.unlock();
+            }
         }
     }
 

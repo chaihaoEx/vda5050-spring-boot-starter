@@ -93,6 +93,9 @@ public class VehicleContext {
     /** 因超时而被标记为 FAILED 的 actionId 集合，用于防止异步回调覆盖超时结果 */
     private final Set<String> timedOutActionIds = new HashSet<>();
 
+    /** 已取消的 orderId 集合，用于防止异步回调覆盖已取消订单的状态 */
+    private final Set<String> cancelledOrderIds = new HashSet<>();
+
     /**
      * Proxy 模式专属 MQTT 客户端（每辆 Proxy 车辆独立），支持独立 LWT。
      * 非 Proxy 模式车辆此字段为 null。
@@ -241,6 +244,14 @@ public class VehicleContext {
     public void removeTimedOutActionId(String actionId) { timedOutActionIds.remove(actionId); }
 
     public void clearTimedOutActionIds() { timedOutActionIds.clear(); }
+
+    public void addCancelledOrderId(String orderId) { cancelledOrderIds.add(orderId); }
+
+    public boolean isCancelledOrder(String orderId) { return cancelledOrderIds.contains(orderId); }
+
+    public void removeCancelledOrderId(String orderId) { cancelledOrderIds.remove(orderId); }
+
+    public void clearCancelledOrderIds() { cancelledOrderIds.clear(); }
 
     public MqttClient getProxyMqttClient() { return proxyMqttClient; }
     public void setProxyMqttClient(MqttClient proxyMqttClient) { this.proxyMqttClient = proxyMqttClient; }

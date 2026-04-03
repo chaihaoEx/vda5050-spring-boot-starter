@@ -56,21 +56,26 @@
 
 ---
 
-## Phase 3 — Visibility, Configuration & Spec Conformance
+## Phase 3 — Visibility, Configuration & Spec Conformance ✅ 已完成
 
 **分支**: `fix/phase3-visibility-spec`  
 **依赖**: Phase 2
 
-| # | 问题 | 修复方式 |
-|---|------|---------|
-| M1 | MqttInboundRouter handler 字段非 volatile | 5 个 handler 字段加 `volatile` |
-| M2 | MqttHealthIndicator 不区分模式 | 重写 health() 按 proxy/server 模式分别评估 |
-| M3 | ObjectMapper 注入未用 @Qualifier | AutoConfig 中注入点加 `@Qualifier("vda5050ObjectMapper")` |
-| M4 | cancelOrder blockingType 应为 HARD（VDA5050 spec） | InstantActionSender 修正 |
-| M5 | handleCancelOrder 不清理 actionStartTimes | 补充清理 + 新增 cancelledOrderIds 防止回调覆盖已取消订单 |
-| M6 | factsheetRequest 在锁内 MQTT publish | ProxyOrderStateMachine 收集 factsheet 后锁外 publish |
+### 修复项
 
-**预估工作量**: 1.5-2 天
+| # | 问题 | 文件 | 修复方式 |
+|---|------|------|---------|
+| M1 | MqttInboundRouter handler 字段非 volatile | `MqttInboundRouter.java` | 5 个 handler 字段加 `volatile` |
+| M2 | MqttHealthIndicator 不区分模式 | `MqttHealthIndicator.java` | 重写 health() 按 proxy/server 模式分别评估，Server 模式检查 sharedClient，Proxy 模式检查 per-vehicle client，任一 DOWN 则整体 DOWN |
+| M3 | ObjectMapper 注入未用 @Qualifier | `Vda5050AutoConfiguration.java` | 3 个注入点（mqttGateway, mqttInboundRouter, mqttConnectionManager）加 `@Qualifier("vda5050ObjectMapper")` |
+| M4 | cancelOrder blockingType 应为 HARD（VDA5050 spec） | `InstantActionSender.java` | `sendBuiltinAction` 对 cancelOrder 使用 `BlockingType.HARD`，其余保持 NONE |
+| M5 | handleCancelOrder 不清理 actionStartTimes | `ProxyOrderStateMachine.java`, `VehicleContext.java` | handleCancelOrder 补充 `clearActionStartTimes()` + `setNavigationStartTime(0)`；VehicleContext 新增 `cancelledOrderIds` Set 及 add/is/remove/clear 方法；receiveOrder 时清理 cancelledOrderIds |
+| M6 | factsheetRequest 在锁内 MQTT publish | `ProxyOrderStateMachine.java` | `processInstantAction` 改为返回 Factsheet，`receiveInstantActions` 在锁外执行 `publishFactsheet` |
+
+### 测试新增（11 个测试用例）
+- `Phase3VisibilitySpecTest` — M4 cancelOrder HARD blockingType + pauseVehicle NONE（2 tests）、M5 清理 actionStartTimes/navigationStartTime + cancelledOrderIds 跟踪 + 新订单清理（3 tests）、M6 锁外发布 factsheet + actionStatus FINISHED（2 tests）
+- `MqttHealthIndicatorTest` — M2 server-only/proxy-only/mixed 模式健康评估（5 tests，含原有 2 个重写）
+- `VehicleContextTest` — cancelledOrderIds add/remove/clear（3 tests）
 
 ---
 
@@ -122,7 +127,7 @@
 |-------|------|--------|--------|---------|
 | 1 | Critical Safety ✅ | 8 CRITICAL | 已完成 | HeartbeatScheduler, VehicleContext, 10+11 models, SslUtil, MqttGateway, OrderDispatcher, InstantActionSender |
 | 2 | High Correctness ✅ | 5 HIGH | 已完成 | ProxyOrderExecutor, VehicleContext, AgvStateTracker, MqttGateway, ProxyAutoConfig |
-| 3 | Visibility + Spec | 6 MEDIUM | 1.5-2天 | MqttInboundRouter, HealthIndicator, AutoConfig, InstantActionSender |
+| 3 | Visibility + Spec ✅ | 6 MEDIUM | 已完成 | MqttInboundRouter, HealthIndicator, AutoConfig, InstantActionSender, ProxyOrderStateMachine, VehicleContext |
 | 4 | Decompose + Lock Split | 3 MEDIUM (结构性) | 3天 | ProxyOrderExecutor→3类, VehicleContext, MqttConnectionManager |
 | 5 | Hardening + Polish | 6 项 | 2天 | AgvState, OrderDispatcher, HealthIndicator, 测试 |
 | **合计** | | **28 项** | **~12 天** | |

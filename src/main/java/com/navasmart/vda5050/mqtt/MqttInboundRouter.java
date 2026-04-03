@@ -46,19 +46,19 @@ public class MqttInboundRouter implements MqttCallbackExtended {
     private final VehicleRegistry vehicleRegistry;
 
     /** Proxy 模式处理器：接收主控下发的 Order */
-    private BiConsumer<VehicleContext, Order> orderHandler;
+    private volatile BiConsumer<VehicleContext, Order> orderHandler;
 
     /** Proxy 模式处理器：接收主控下发的 InstantActions */
-    private BiConsumer<VehicleContext, InstantActions> instantActionsHandler;
+    private volatile BiConsumer<VehicleContext, InstantActions> instantActionsHandler;
 
     /** Server 模式处理器：接收 AGV 上报的 State */
-    private BiConsumer<VehicleContext, AgvState> stateHandler;
+    private volatile BiConsumer<VehicleContext, AgvState> stateHandler;
 
     /** Server 模式处理器：接收 AGV 上报的 Connection 状态 */
-    private BiConsumer<VehicleContext, Connection> connectionHandler;
+    private volatile BiConsumer<VehicleContext, Connection> connectionHandler;
 
     /** Server 模式处理器：接收 AGV 上报的 Factsheet */
-    private BiConsumer<VehicleContext, Factsheet> factsheetHandler;
+    private volatile BiConsumer<VehicleContext, Factsheet> factsheetHandler;
 
     /** 连接丢失监听器列表（线程安全） */
     private final List<Runnable> connectionLostListeners = new CopyOnWriteArrayList<>();

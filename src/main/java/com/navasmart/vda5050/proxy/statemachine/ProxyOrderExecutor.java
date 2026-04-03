@@ -340,6 +340,9 @@ public class ProxyOrderExecutor {
 
         String actionId = action.getActionId();
         String vehicleId = ctx.getVehicleId();
+        // Capture orderId so the async callback can check if order was cancelled
+        Order currentOrder = ctx.getCurrentOrder();
+        String orderId = currentOrder != null ? currentOrder.getOrderId() : null;
         future.whenComplete((result, ex) -> {
             try {
                 if (!ctx.tryLock(5, TimeUnit.SECONDS)) {
@@ -354,6 +357,12 @@ public class ProxyOrderExecutor {
                 return;
             }
             try {
+                // 如果订单已被取消，忽略回调，避免覆盖已取消订单的状态
+                if (orderId != null && ctx.isCancelledOrder(orderId)) {
+                    ctx.removeCancelledOrderId(orderId);
+                    return;
+                }
+
                 ctx.removeActionStartTime(actionId);
                 ActionState as = findActionState(ctx, actionId);
                 if (as == null) {
@@ -471,6 +480,7 @@ public class ProxyOrderExecutor {
         }
 
         String vehicleId = ctx.getVehicleId();
+        String navOrderId = order.getOrderId();
         CompletableFuture<NavigationResult> navFuture =
                 vehicleAdapter.onNavigate(vehicleId, targetNode, waypoints, edges);
 
@@ -488,6 +498,12 @@ public class ProxyOrderExecutor {
                 return;
             }
             try {
+                // 如果订单已被取消，忽略导航结果，避免覆盖已取消订单的状态
+                if (ctx.isCancelledOrder(navOrderId)) {
+                    ctx.removeCancelledOrderId(navOrderId);
+                    return;
+                }
+
                 ctx.setNavigationStartTime(0);
                 if (ex != null) {
                     errorAggregator.addFatalError(ctx, "Navigation failed: " + ex.getMessage(),
