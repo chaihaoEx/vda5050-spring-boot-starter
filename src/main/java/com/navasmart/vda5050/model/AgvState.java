@@ -104,6 +104,40 @@ public class AgvState {
 
     public AgvState() {}
 
+    /**
+     * 拷贝构造函数，创建一个 AgvState 的浅拷贝快照。
+     * List 字段使用新 ArrayList 拷贝（浅拷贝元素），适用于心跳发布时锁内快照、锁外序列化场景。
+     *
+     * @param src 源 AgvState
+     */
+    public AgvState(AgvState src) {
+        this.headerId = src.headerId;
+        this.timestamp = src.timestamp;
+        this.version = src.version;
+        this.manufacturer = src.manufacturer;
+        this.serialNumber = src.serialNumber;
+        this.orderId = src.orderId;
+        this.orderUpdateId = src.orderUpdateId;
+        this.zoneSetId = src.zoneSetId;
+        this.lastNodeId = src.lastNodeId;
+        this.lastNodeSequenceId = src.lastNodeSequenceId;
+        this.nodeStates = new ArrayList<>(src.nodeStates);
+        this.edgeStates = new ArrayList<>(src.edgeStates);
+        this.agvPosition = src.agvPosition;
+        this.velocity = src.velocity;
+        this.loads = src.loads != null ? new ArrayList<>(src.loads) : null;
+        this.driving = src.driving;
+        this.paused = src.paused;
+        this.newBaseRequested = src.newBaseRequested;
+        this.distanceSinceLastNode = src.distanceSinceLastNode;
+        this.actionStates = new ArrayList<>(src.actionStates);
+        this.batteryState = src.batteryState;
+        this.operatingMode = src.operatingMode;
+        this.errors = new ArrayList<>(src.errors);
+        this.informations = new ArrayList<>(src.informations);
+        this.safetyState = src.safetyState;
+    }
+
     public int getHeaderId() { return headerId; }
     public void setHeaderId(int headerId) { this.headerId = headerId; }
 

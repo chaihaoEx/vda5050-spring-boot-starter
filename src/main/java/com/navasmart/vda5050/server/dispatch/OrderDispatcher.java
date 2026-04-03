@@ -1,7 +1,9 @@
 package com.navasmart.vda5050.server.dispatch;
 
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
+import com.navasmart.vda5050.model.AgvState;
 import com.navasmart.vda5050.model.Order;
+import com.navasmart.vda5050.model.enums.ErrorLevel;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.server.callback.SendResult;
 import com.navasmart.vda5050.util.TimestampUtil;
@@ -56,6 +58,11 @@ public class OrderDispatcher {
 
         ctx.lockServer();
         try {
+            AgvState receivedState = ctx.getLastReceivedState();
+            if (receivedState != null && hasFatalError(receivedState)) {
+                return SendResult.failure("Vehicle " + vehicleId + " has FATAL error, refusing to send order");
+            }
+
             order.setHeaderId(ctx.nextOrderHeaderId());
             order.setTimestamp(TimestampUtil.now());
             order.setVersion(properties.getMqtt().getProtocolVersion());
@@ -63,6 +70,7 @@ public class OrderDispatcher {
             order.setSerialNumber(ctx.getSerialNumber());
 
             ctx.setLastSentOrder(order);
+            ctx.removeCompletedOrderId(order.getOrderId());
         } finally {
             ctx.unlockServer();
         }
@@ -102,5 +110,10 @@ public class OrderDispatcher {
         }
 
         return sendOrder(vehicleId, orderUpdate);
+    }
+
+    private boolean hasFatalError(AgvState state) {
+        return state.getErrors().stream()
+                .anyMatch(e -> ErrorLevel.FATAL.getValue().equals(e.getErrorLevel()));
     }
 }

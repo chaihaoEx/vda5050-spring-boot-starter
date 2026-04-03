@@ -114,6 +114,9 @@ public class VehicleContext {
     /** 已取消的 orderId 集合，用于防止异步回调覆盖已取消订单的状态 */
     private final Set<String> cancelledOrderIds = new HashSet<>();
 
+    /** Proxy 车辆的重连尝试次数（原子操作，无需持锁） */
+    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+
     /**
      * Proxy 模式专属 MQTT 客户端（每辆 Proxy 车辆独立），支持独立 LWT。
      * 非 Proxy 模式车辆此字段为 null。
@@ -133,6 +136,9 @@ public class VehicleContext {
 
     /** 最后一次收到 AGV 消息的时间戳（epoch 毫秒） */
     private long lastSeenTimestamp;
+
+    /** 已完成的 orderId 集合（需持 serverStateLock 访问），用于防止 order completion 回调重复触发 */
+    private final Set<String> completedOrderIds = new HashSet<>();
 
     // ============ Header ID 生成器（AtomicInteger，无需持锁） ============
 
@@ -293,6 +299,18 @@ public class VehicleContext {
     public void removeCancelledOrderId(String orderId) { cancelledOrderIds.remove(orderId); }
 
     public void clearCancelledOrderIds() { cancelledOrderIds.clear(); }
+
+    public void addCompletedOrderId(String orderId) { completedOrderIds.add(orderId); }
+
+    public boolean isCompletedOrder(String orderId) { return completedOrderIds.contains(orderId); }
+
+    public void removeCompletedOrderId(String orderId) { completedOrderIds.remove(orderId); }
+
+    public void clearCompletedOrderIds() { completedOrderIds.clear(); }
+
+    public int getReconnectAttempts() { return reconnectAttempts.get(); }
+    public int incrementReconnectAttempts() { return reconnectAttempts.incrementAndGet(); }
+    public void resetReconnectAttempts() { reconnectAttempts.set(0); }
 
     public MqttClient getProxyMqttClient() { return proxyMqttClient; }
     public void setProxyMqttClient(MqttClient proxyMqttClient) { this.proxyMqttClient = proxyMqttClient; }
