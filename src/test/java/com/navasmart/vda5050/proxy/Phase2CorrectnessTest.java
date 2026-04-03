@@ -192,27 +192,10 @@ class Phase2CorrectnessTest {
 
     @Test
     void actionTimeout_callsActionCancelOutsideLock() throws InterruptedException {
-        // Set up a running action that will timeout
-        Action action = new Action();
-        action.setActionId("act-1");
-        action.setActionType("testAction");
-        action.setBlockingType(BlockingType.HARD.getValue());
-
+        Order order = createOrderWithAction("order-1", 0, "act-1", "testAction", BlockingType.HARD.getValue());
         ActionState actionState = new ActionState();
         actionState.setActionId("act-1");
         actionState.setActionStatus(ActionStatus.RUNNING.getValue());
-
-        Node node = new Node();
-        node.setNodeId("node-1");
-        node.setSequenceId(0);
-        node.setReleased(true);
-        node.setActions(List.of(action));
-
-        Order order = new Order();
-        order.setOrderId("order-1");
-        order.setOrderUpdateId(0);
-        order.setNodes(List.of(node));
-        order.setEdges(new ArrayList<>());
 
         ctx.lock();
         try {
@@ -221,7 +204,6 @@ class Phase2CorrectnessTest {
             ctx.setCurrentNodeIndex(0);
             ctx.setCurrentOrder(order);
             ctx.getAgvState().setActionStates(List.of(actionState));
-            // Action started long ago → will timeout
             ctx.putActionStartTime("act-1", 1);
         } finally {
             ctx.unlock();
@@ -239,26 +221,10 @@ class Phase2CorrectnessTest {
 
     @Test
     void actionTimeout_marksActionInTimedOutSet() {
-        Action action = new Action();
-        action.setActionId("act-1");
-        action.setActionType("testAction");
-        action.setBlockingType(BlockingType.HARD.getValue());
-
+        Order order = createOrderWithAction("order-1", 0, "act-1", "testAction", BlockingType.HARD.getValue());
         ActionState actionState = new ActionState();
         actionState.setActionId("act-1");
         actionState.setActionStatus(ActionStatus.RUNNING.getValue());
-
-        Node node = new Node();
-        node.setNodeId("node-1");
-        node.setSequenceId(0);
-        node.setReleased(true);
-        node.setActions(List.of(action));
-
-        Order order = new Order();
-        order.setOrderId("order-1");
-        order.setOrderUpdateId(0);
-        order.setNodes(List.of(node));
-        order.setEdges(new ArrayList<>());
 
         ctx.lock();
         try {
@@ -285,28 +251,11 @@ class Phase2CorrectnessTest {
     }
 
     @Test
-    void asyncCallback_doesNotOverwriteTimedOutAction() throws Exception {
-        // Set up: action starts, runs, times out, then async callback arrives with success
-        Action action = new Action();
-        action.setActionId("act-1");
-        action.setActionType("testAction");
-        action.setBlockingType(BlockingType.HARD.getValue());
-
+    void asyncCallback_doesNotOverwriteTimedOutAction() {
+        Order order = createOrderWithAction("order-1", 0, "act-1", "testAction", BlockingType.HARD.getValue());
         ActionState actionState = new ActionState();
         actionState.setActionId("act-1");
         actionState.setActionStatus(ActionStatus.WAITING.getValue());
-
-        Node node = new Node();
-        node.setNodeId("node-1");
-        node.setSequenceId(0);
-        node.setReleased(true);
-        node.setActions(List.of(action));
-
-        Order order = new Order();
-        order.setOrderId("order-1");
-        order.setOrderUpdateId(0);
-        order.setNodes(List.of(node));
-        order.setEdges(new ArrayList<>());
 
         ctx.lock();
         try {
@@ -346,10 +295,8 @@ class Phase2CorrectnessTest {
         }
 
         // Step 4: async callback arrives with success — should NOT overwrite FAILED
+        // complete() executes whenComplete synchronously on the calling thread
         actionFuture.complete(ActionResult.success());
-
-        // Give the whenComplete callback time to execute
-        Thread.sleep(200);
 
         ctx.lock();
         try {
@@ -395,11 +342,25 @@ class Phase2CorrectnessTest {
     // ============ helpers ============
 
     private Order createSimpleOrder(String orderId, int orderUpdateId) {
+        return createOrderWithAction(orderId, orderUpdateId, null, null, null);
+    }
+
+    private Order createOrderWithAction(String orderId, int orderUpdateId,
+                                         String actionId, String actionType, String blockingType) {
         Node node = new Node();
         node.setNodeId("node-1");
         node.setSequenceId(0);
         node.setReleased(true);
-        node.setActions(new ArrayList<>());
+
+        if (actionId != null) {
+            Action action = new Action();
+            action.setActionId(actionId);
+            action.setActionType(actionType);
+            action.setBlockingType(blockingType);
+            node.setActions(List.of(action));
+        } else {
+            node.setActions(new ArrayList<>());
+        }
 
         Order order = new Order();
         order.setOrderId(orderId);

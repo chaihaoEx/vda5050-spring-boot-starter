@@ -160,7 +160,8 @@ public class Vda5050ProxyAutoConfiguration {
                 throw new BeanCreationException(
                         "vda5050.proxy.enabled=true but required bean(s) missing: "
                                 + String.join(", ", missing)
-                                + ". Please provide @Bean definition(s) in your configuration.");
+                                + ". Please provide @Bean definition(s) in your configuration."
+                                + " See docs/13-proxy-quick-start.md for setup instructions.");
             }
         };
     }

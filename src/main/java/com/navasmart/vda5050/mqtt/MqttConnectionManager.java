@@ -59,19 +59,22 @@ public class MqttConnectionManager {
     private final VehicleRegistry vehicleRegistry;
     private final Vda5050Properties properties;
     private final ObjectMapper objectMapper;
+    private final MqttGateway mqttGateway;
 
     /** 共享 client 的连续断连计数器（成功重连后重置为 0） */
     private final AtomicInteger consecutiveDisconnects = new AtomicInteger(0);
 
     public MqttConnectionManager(MqttClient mqttClient, MqttInboundRouter inboundRouter,
                                  MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry,
-                                 Vda5050Properties properties, ObjectMapper objectMapper) {
+                                 Vda5050Properties properties, ObjectMapper objectMapper,
+                                 MqttGateway mqttGateway) {
         this.sharedMqttClient = mqttClient;
         this.inboundRouter = inboundRouter;
         this.topicResolver = topicResolver;
         this.vehicleRegistry = vehicleRegistry;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.mqttGateway = mqttGateway;
     }
 
     /**
@@ -176,6 +179,7 @@ public class MqttConnectionManager {
             throw e;
         }
         ctx.setProxyMqttClient(vehicleClient);
+        mqttGateway.clearProxyClientWarning(ctx.getManufacturer(), ctx.getSerialNumber());
 
         subscribeProxyTopics(vehicleClient, ctx);
         log.info("Proxy vehicle {} connected with dedicated MQTT client (id={})",

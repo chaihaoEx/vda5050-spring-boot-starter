@@ -116,6 +116,14 @@ public class MqttGateway {
     }
 
     /**
+     * 重置指定车辆的 proxy client 缺失告警状态。
+     * 在车辆 proxy client 重新连接成功后调用，使下次断开时能再次产生 WARN 日志。
+     */
+    public void clearProxyClientWarning(String manufacturer, String serialNumber) {
+        proxyClientWarnedVehicles.remove(manufacturer + ":" + serialNumber);
+    }
+
+    /**
      * 检查速率限制：如果距上次发布同 key 的间隔不足 minPublishIntervalMs，则跳过。
      * key 格式为 topicType:manufacturer:serialNumber，按车辆粒度限流。
      * 使用 ConcurrentHashMap.compute() 保证原子性。
