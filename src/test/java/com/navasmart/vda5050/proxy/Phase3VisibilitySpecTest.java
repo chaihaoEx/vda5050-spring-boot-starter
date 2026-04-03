@@ -298,6 +298,76 @@ class Phase3VisibilitySpecTest {
         }
     }
 
+    // ============ MEDIUM-1: onOrderCancel called outside lock ============
+
+    @Test
+    void cancelOrder_callsAdapterOutsideLock() {
+        final boolean[] lockHeldDuringCancel = {false};
+
+        Vda5050ProxyVehicleAdapter trackingAdapter = new Vda5050ProxyVehicleAdapter() {
+            @Override
+            public CompletableFuture<NavigationResult> onNavigate(String vehicleId,
+                    Node targetNode, List<Node> waypoints,
+                    List<com.navasmart.vda5050.model.Edge> edges) {
+                return CompletableFuture.completedFuture(NavigationResult.success());
+            }
+            @Override
+            public CompletableFuture<ActionResult> onActionExecute(String vehicleId, Action action) {
+                return new CompletableFuture<>();
+            }
+            @Override public void onPause(String vehicleId) {}
+            @Override public void onResume(String vehicleId) {}
+            @Override
+            public void onOrderCancel(String vehicleId) {
+                boolean acquired = false;
+                try {
+                    acquired = ctx.tryLock(0, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                if (!acquired) {
+                    lockHeldDuringCancel[0] = true;
+                } else {
+                    ctx.unlock();
+                }
+            }
+            @Override public void onNavigationCancel(String vehicleId) {}
+            @Override public void onActionCancel(String vehicleId, String actionId) {}
+        };
+
+        ProxyOrderStateMachine sm = new ProxyOrderStateMachine(
+                errorAggregator, trackingAdapter, stateProvider,
+                mqttGateway, eventPublisher, new OrderValidator());
+
+        ctx.lock();
+        try {
+            ctx.setClientState(ProxyClientState.RUNNING);
+            ctx.setCurrentOrder(createSimpleOrder("order-1", 1));
+        } finally {
+            ctx.unlock();
+        }
+
+        InstantActions cancelMsg = new InstantActions();
+        Action cancelAction = new Action();
+        cancelAction.setActionId("cancel-1");
+        cancelAction.setActionType("cancelOrder");
+        cancelAction.setBlockingType(BlockingType.HARD.getValue());
+        cancelMsg.setInstantActions(List.of(cancelAction));
+
+        sm.receiveInstantActions(ctx, cancelMsg);
+
+        assertThat(lockHeldDuringCancel[0])
+                .as("Lock should NOT be held during onOrderCancel adapter callback")
+                .isFalse();
+
+        ctx.lock();
+        try {
+            assertThat(ctx.getClientState()).isEqualTo(ProxyClientState.IDLE);
+        } finally {
+            ctx.unlock();
+        }
+    }
+
     // ============ helpers ============
 
     private Order createSimpleOrder(String orderId, int orderUpdateId) {

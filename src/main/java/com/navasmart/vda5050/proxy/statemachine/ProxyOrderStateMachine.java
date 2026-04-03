@@ -162,25 +162,58 @@ public class ProxyOrderStateMachine {
         Factsheet pendingFactsheet = null;
         String manufacturer;
         String serialNumber;
+        String vehicleId;
+        // Deferred adapter callbacks to execute outside lock
+        boolean deferredCancel = false;
+        boolean deferredPause = false;
+        boolean deferredResume = false;
 
         ctx.lock();
         try {
             manufacturer = ctx.getManufacturer();
             serialNumber = ctx.getSerialNumber();
+            vehicleId = ctx.getVehicleId();
             for (Action action : instantActions.getInstantActions()) {
-                Factsheet fs = processInstantAction(ctx, action);
-                if (fs != null) {
-                    pendingFactsheet = fs;
+                InstantActionResult result = processInstantAction(ctx, action);
+                if (result.factsheet != null) {
+                    pendingFactsheet = result.factsheet;
+                }
+                if (result.deferredCallback != null) {
+                    switch (result.deferredCallback) {
+                        case CANCEL -> deferredCancel = true;
+                        case PAUSE -> deferredPause = true;
+                        case RESUME -> deferredResume = true;
+                        default -> { }
+                    }
                 }
             }
         } finally {
             ctx.unlock();
         }
 
-        // Publish factsheet outside lock to avoid I/O under lock
+        // Adapter callbacks and MQTT publish outside lock
+        if (deferredCancel) {
+            vehicleAdapter.onOrderCancel(vehicleId);
+        }
+        if (deferredPause) {
+            vehicleAdapter.onPause(vehicleId);
+        }
+        if (deferredResume) {
+            vehicleAdapter.onResume(vehicleId);
+        }
         if (pendingFactsheet != null) {
             mqttGateway.publishFactsheet(manufacturer, serialNumber, pendingFactsheet);
         }
+    }
+
+    /** Deferred callback type for adapter calls that must execute outside lock */
+    private enum DeferredCallback { CANCEL, PAUSE, RESUME }
+
+    /** Result of processing a single instant action — carries deferred work to execute outside lock */
+    private record InstantActionResult(Factsheet factsheet, DeferredCallback deferredCallback) {
+        static final InstantActionResult NONE = new InstantActionResult(null, null);
+        static InstantActionResult withCallback(DeferredCallback cb) { return new InstantActionResult(null, cb); }
+        static InstantActionResult withFactsheet(Factsheet fs) { return new InstantActionResult(fs, null); }
     }
 
     /**
@@ -278,22 +311,25 @@ public class ProxyOrderStateMachine {
     /**
      * 处理单个即时动作：内置动作（cancelOrder 等）直接处理，其他加入 actionStates 由执行器异步处理。
      *
-     * @return 如果是 factsheetRequest 且成功获取了 Factsheet，返回待发布的 Factsheet；否则返回 null
+     * @return 处理结果，包含需要在锁外执行的 adapter 回调和/或待发布的 Factsheet
      */
-    private Factsheet processInstantAction(VehicleContext ctx, Action action) {
+    private InstantActionResult processInstantAction(VehicleContext ctx, Action action) {
         // 检查重复的 actionId，避免重复处理同一动作
         for (ActionState as : ctx.getAgvState().getActionStates()) {
             if (as.getActionId().equals(action.getActionId())) {
-                return null; // Already exists
+                return InstantActionResult.NONE;
             }
         }
 
         String actionType = action.getActionType();
         // 根据 actionType 分发处理：内置动作由状态机直接处理，自定义动作加入等待队列
         switch (actionType) {
-            case "cancelOrder" -> handleCancelOrder(ctx, action);
-            case "startPause", "stopPause" -> handlePause(ctx, action, actionType);
-            case "factsheetRequest" -> { return handleFactsheetRequest(ctx, action); }
+            case "cancelOrder" -> { return handleCancelOrder(ctx, action); }
+            case "startPause", "stopPause" -> { return handlePause(ctx, action, actionType); }
+            case "factsheetRequest" -> {
+                Factsheet fs = handleFactsheetRequest(ctx, action);
+                return fs != null ? InstantActionResult.withFactsheet(fs) : InstantActionResult.NONE;
+            }
             default -> {
                 // 非内置动作：添加到 actionStates 队列，由 ProxyOrderExecutor 在执行循环中处理
                 ActionState as = new ActionState();
@@ -304,14 +340,14 @@ public class ProxyOrderStateMachine {
                 ctx.getAgvState().getActionStates().add(as);
             }
         }
-        return null;
+        return InstantActionResult.NONE;
     }
 
-    private void handleCancelOrder(VehicleContext ctx, Action action) {
+    private InstantActionResult handleCancelOrder(VehicleContext ctx, Action action) {
         if (ctx.getClientState() == ProxyClientState.IDLE) {
             errorAggregator.addWarning(ctx, "No order to cancel", "noOrderToCancel", null);
             addInstantActionState(ctx, action, ActionStatus.FAILED, "No active order");
-            return;
+            return InstantActionResult.NONE;
         }
 
         // Record cancelled orderId to prevent async callbacks from overwriting state
@@ -320,22 +356,23 @@ public class ProxyOrderStateMachine {
             ctx.addCancelledOrderId(currentOrder.getOrderId());
         }
 
-        vehicleAdapter.onOrderCancel(ctx.getVehicleId());
         ctx.setClientState(ProxyClientState.IDLE);
         ctx.setCurrentOrder(null);
         ctx.clearActionStartTimes();
         ctx.setNavigationStartTime(0);
         addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
         log.info("Vehicle {} order cancelled", ctx.getVehicleId());
+        // Adapter callback deferred to execute outside lock
+        return InstantActionResult.withCallback(DeferredCallback.CANCEL);
     }
 
-    private void handlePause(VehicleContext ctx, Action action, String actionType) {
+    private InstantActionResult handlePause(VehicleContext ctx, Action action, String actionType) {
         if ("startPause".equals(actionType)) {
             if (ctx.getClientState() == ProxyClientState.RUNNING) {
                 ctx.setClientState(ProxyClientState.PAUSED);
                 ctx.getAgvState().setPaused(true);
-                vehicleAdapter.onPause(ctx.getVehicleId());
                 addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+                return InstantActionResult.withCallback(DeferredCallback.PAUSE);
             } else {
                 addInstantActionState(ctx, action, ActionStatus.FAILED, "Not in RUNNING state");
             }
@@ -343,12 +380,13 @@ public class ProxyOrderStateMachine {
             if (ctx.getClientState() == ProxyClientState.PAUSED) {
                 ctx.setClientState(ProxyClientState.RUNNING);
                 ctx.getAgvState().setPaused(false);
-                vehicleAdapter.onResume(ctx.getVehicleId());
                 addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+                return InstantActionResult.withCallback(DeferredCallback.RESUME);
             } else {
                 addInstantActionState(ctx, action, ActionStatus.FAILED, "Not in PAUSED state");
             }
         }
+        return InstantActionResult.NONE;
     }
 
     /**
