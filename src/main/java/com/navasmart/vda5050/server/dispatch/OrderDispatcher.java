@@ -54,7 +54,7 @@ public class OrderDispatcher {
             return SendResult.failure("Vehicle not registered: " + vehicleId);
         }
 
-        ctx.lock();
+        ctx.lockServer();
         try {
             order.setHeaderId(ctx.nextOrderHeaderId());
             order.setTimestamp(TimestampUtil.now());
@@ -64,7 +64,7 @@ public class OrderDispatcher {
 
             ctx.setLastSentOrder(order);
         } finally {
-            ctx.unlock();
+            ctx.unlockServer();
         }
 
         boolean published = mqttGateway.publishOrder(ctx.getManufacturer(), ctx.getSerialNumber(), order);
@@ -91,14 +91,14 @@ public class OrderDispatcher {
             return SendResult.failure("Vehicle not registered: " + vehicleId);
         }
 
-        ctx.lock();
+        ctx.lockServer();
         try {
             Order lastSent = ctx.getLastSentOrder();
             if (lastSent != null && !lastSent.getOrderId().equals(orderUpdate.getOrderId())) {
                 return SendResult.failure("Order ID mismatch: expected " + lastSent.getOrderId());
             }
         } finally {
-            ctx.unlock();
+            ctx.unlockServer();
         }
 
         return sendOrder(vehicleId, orderUpdate);

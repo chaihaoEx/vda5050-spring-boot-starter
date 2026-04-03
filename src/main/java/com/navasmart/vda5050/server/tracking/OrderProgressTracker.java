@@ -40,7 +40,7 @@ public class OrderProgressTracker {
             return OrderProgress.idle(vehicleId);
         }
 
-        ctx.lock();
+        ctx.lockServer();
         try {
             AgvState state = ctx.getLastReceivedState();
             Order sentOrder = ctx.getLastSentOrder();
@@ -64,7 +64,7 @@ public class OrderProgressTracker {
                     totalNodes, completedNodes, totalActions, completedActions,
                     state.isDriving(), state.getLastNodeId(), state.getErrors());
         } finally {
-            ctx.unlock();
+            ctx.unlockServer();
         }
     }
 }
