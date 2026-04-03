@@ -14,12 +14,16 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -43,6 +47,27 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @EnableConfigurationProperties(Vda5050Properties.class)
 public class Vda5050AutoConfiguration {
+
+    private static final Logger log = LoggerFactory.getLogger(Vda5050AutoConfiguration.class);
+
+    private final Vda5050Properties properties;
+
+    public Vda5050AutoConfiguration(Vda5050Properties properties) {
+        this.properties = properties;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void onApplicationReady() {
+        boolean proxyEnabled = properties.getProxy().isEnabled();
+        boolean serverEnabled = properties.getServer().isEnabled();
+        int proxyVehicles = proxyEnabled ? properties.getProxy().getVehicles().size() : 0;
+        int serverVehicles = serverEnabled ? properties.getServer().getVehicles().size() : 0;
+        boolean sslEnabled = properties.getMqtt().getSsl().isEnabled();
+
+        log.info("VDA5050 Starter ready — proxy={} ({} vehicles), server={} ({} vehicles), ssl={}, broker={}:{}",
+                proxyEnabled, proxyVehicles, serverEnabled, serverVehicles, sslEnabled,
+                properties.getMqtt().getHost(), properties.getMqtt().getPort());
+    }
 
     /**
      * 创建 VDA5050 专用的 ObjectMapper，配置为忽略未知属性、排除 null 值。
