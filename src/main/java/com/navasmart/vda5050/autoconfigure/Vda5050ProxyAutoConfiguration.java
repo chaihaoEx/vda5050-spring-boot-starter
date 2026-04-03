@@ -12,12 +12,18 @@ import com.navasmart.vda5050.proxy.heartbeat.ProxyHeartbeatScheduler;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderStateMachine;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
+import org.springframework.beans.factory.BeanCreationException;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * VDA5050 Proxy 模式的自动配置类，当 {@code vda5050.proxy.enabled=true} 时激活。
@@ -134,5 +140,28 @@ public class Vda5050ProxyAutoConfiguration {
             router.setOrderHandler((ctx, order) -> stateMachine.receiveOrder(ctx, order));
             router.setInstantActionsHandler((ctx, actions) -> stateMachine.receiveInstantActions(ctx, actions));
         }
+    }
+
+    /**
+     * 启动后校验：确保用户提供了 Proxy 模式所需的必要 Bean。
+     * 在所有单例初始化完成后执行，如果缺少必要的 Bean 则抛出异常使启动失败。
+     */
+    @Bean
+    SmartInitializingSingleton proxyAdapterValidator(ApplicationContext context) {
+        return () -> {
+            List<String> missing = new ArrayList<>();
+            if (context.getBeanNamesForType(Vda5050ProxyVehicleAdapter.class).length == 0) {
+                missing.add("Vda5050ProxyVehicleAdapter");
+            }
+            if (context.getBeanNamesForType(Vda5050ProxyStateProvider.class).length == 0) {
+                missing.add("Vda5050ProxyStateProvider");
+            }
+            if (!missing.isEmpty()) {
+                throw new BeanCreationException(
+                        "vda5050.proxy.enabled=true but required bean(s) missing: "
+                                + String.join(", ", missing)
+                                + ". Please provide @Bean definition(s) in your configuration.");
+            }
+        };
     }
 }
