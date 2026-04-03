@@ -34,21 +34,25 @@
 
 ---
 
-## Phase 2 — High-Severity Correctness Bugs
+## Phase 2 — High-Severity Correctness Bugs ✅ 已完成
 
-**分支**: `fix/phase2-high-correctness`  
-**依赖**: Phase 1（VehicleContext.tryLock 和锁模式已建立）
+**分支**: `fix/phase2-high-correctness`
+
+### 修复项
 
 | # | 问题 | 文件 | 修复方式 |
 |---|------|------|---------|
-| H1 | handleFatalError 在锁内调用 adapter | `ProxyOrderExecutor.java:482-489` | 状态变更在锁内，onNavigationCancel 收集到 completionInfo 后锁外执行 |
-| H2 | Action 超时用脆弱字符串匹配 | `ProxyOrderExecutor.java:344` | VehicleContext 新增 `Set<String> timedOutActionIds`，替代 "Action timeout" 字符串比较 |
-| H3 | AutoConfig @ConditionalOnBean 静默失败 | `Vda5050ProxyAutoConfiguration.java:67` | 添加 SmartInitializingSingleton 校验：proxy.enabled=true 时检查 adapter bean 存在，否则 ERROR 日志 + 抛异常 |
-| H4 | resolveProxyClient 静默回退到共享 client | `MqttGateway.java:97-103` | proxy 模式下 client 为 null 时 log.warn + 跳过发布（而非发到错误 client） |
-| H5 | AgvStateTracker 在 listener 读取前清除 lastSentOrder | `AgvStateTracker.java:153` | 先 snapshot orderId，callbacks 全部收集完后再 setLastSentOrder(null) |
+| H1 | handleFatalError + onActionCancel 在锁内调用 adapter | `ProxyOrderExecutor.java` | executeForVehicle 重构为 if/else if 链消除 early return，handleFatalError 改为纯状态变更，onNavigationCancel 和 onActionCancel 均在锁释放后执行 |
+| H2 | Action 超时用脆弱字符串匹配 | `ProxyOrderExecutor.java`, `VehicleContext.java` | VehicleContext 新增 `Set<String> timedOutActionIds` 及 add/is/remove/clear 方法，超时时写入集合、回调中检查集合替代字符串比较 |
+| H3 | AutoConfig @ConditionalOnBean 静默失败 | `Vda5050ProxyAutoConfiguration.java` | 添加 SmartInitializingSingleton proxyAdapterValidator，启动后校验必需 Bean 存在，缺失则抛 BeanCreationException |
+| H4 | resolveProxyClient 静默回退到共享 client | `MqttGateway.java` | resolveProxyClient 返回 null + log.warn，publishState/publishConnection/publishFactsheet 检查 null 后 skip |
+| H5 | AgvStateTracker orderId 来源不权威 | `AgvStateTracker.java` | collectOrderCompletion 中 orderId 改为从 sentOrder.getOrderId() 获取 |
 
-**预估工作量**: 2 天  
-**测试**: adapter 锁外调用测试、缺少 adapter bean 启动失败测试、cancel 后状态清理测试
+### 测试新增（12 个测试用例）
+- `Phase2CorrectnessTest` — H1 锁外回调验证 + H2 timedOutActionIds 追踪（4 tests）
+- `VehicleContextTest` — timedOutActionIds add/remove/clear + clearActionStartTimes 联动清除（4 tests）
+- `ProxyAutoConfigurationTest` — H3 缺少 adapter/provider 启动失败 + 正常启动（3 new tests）
+- `MqttGatewayProxyClientTest` — H4 proxy client 缺失返回 false + 正常发布（4 tests）
 
 ---
 
@@ -117,7 +121,7 @@
 | Phase | 名称 | 修复数 | 工作量 | 关键文件 |
 |-------|------|--------|--------|---------|
 | 1 | Critical Safety ✅ | 8 CRITICAL | 已完成 | HeartbeatScheduler, VehicleContext, 10+11 models, SslUtil, MqttGateway, OrderDispatcher, InstantActionSender |
-| 2 | High Correctness | 5 HIGH | 2天 | ProxyOrderExecutor, AgvStateTracker, MqttGateway, ProxyAutoConfig |
+| 2 | High Correctness ✅ | 5 HIGH | 已完成 | ProxyOrderExecutor, VehicleContext, AgvStateTracker, MqttGateway, ProxyAutoConfig |
 | 3 | Visibility + Spec | 6 MEDIUM | 1.5-2天 | MqttInboundRouter, HealthIndicator, AutoConfig, InstantActionSender |
 | 4 | Decompose + Lock Split | 3 MEDIUM (结构性) | 3天 | ProxyOrderExecutor→3类, VehicleContext, MqttConnectionManager |
 | 5 | Hardening + Polish | 6 项 | 2天 | AgvState, OrderDispatcher, HealthIndicator, 测试 |

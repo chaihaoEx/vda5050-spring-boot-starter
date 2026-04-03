@@ -145,9 +145,10 @@ public class Vda5050AutoConfiguration {
                                                         MqttTopicResolver topicResolver,
                                                         VehicleRegistry vehicleRegistry,
                                                         Vda5050Properties properties,
-                                                        ObjectMapper vda5050ObjectMapper) {
+                                                        ObjectMapper vda5050ObjectMapper,
+                                                        MqttGateway mqttGateway) {
         return new MqttConnectionManager(mqttClient, inboundRouter, topicResolver,
-                vehicleRegistry, properties, vda5050ObjectMapper);
+                vehicleRegistry, properties, vda5050ObjectMapper, mqttGateway);
     }
 
     /**

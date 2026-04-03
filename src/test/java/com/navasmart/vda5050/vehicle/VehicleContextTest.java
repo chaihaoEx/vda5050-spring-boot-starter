@@ -93,4 +93,44 @@ class VehicleContextTest {
 
         assertThat(ctx.getActionStartTimes()).isEmpty();
     }
+
+    // ============ timedOutActionIds tests ============
+
+    @Test
+    void addTimedOutActionId_tracksAction() {
+        ctx.addTimedOutActionId("action-1");
+
+        assertThat(ctx.isTimedOutAction("action-1")).isTrue();
+        assertThat(ctx.isTimedOutAction("action-2")).isFalse();
+    }
+
+    @Test
+    void removeTimedOutActionId_removesTracking() {
+        ctx.addTimedOutActionId("action-1");
+        ctx.removeTimedOutActionId("action-1");
+
+        assertThat(ctx.isTimedOutAction("action-1")).isFalse();
+    }
+
+    @Test
+    void clearTimedOutActionIds_clearsAll() {
+        ctx.addTimedOutActionId("a1");
+        ctx.addTimedOutActionId("a2");
+
+        ctx.clearTimedOutActionIds();
+
+        assertThat(ctx.isTimedOutAction("a1")).isFalse();
+        assertThat(ctx.isTimedOutAction("a2")).isFalse();
+    }
+
+    @Test
+    void clearActionStartTimes_alsoClearsTimedOutActionIds() {
+        ctx.addTimedOutActionId("action-1");
+        ctx.putActionStartTime("action-1", 1000L);
+
+        ctx.clearActionStartTimes();
+
+        assertThat(ctx.isTimedOutAction("action-1")).isFalse();
+        assertThat(ctx.getActionStartTimes()).isEmpty();
+    }
 }

@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -50,6 +51,9 @@ public class MqttGateway {
 
     /** 每种 Topic 类型的最近发布时间戳（用于速率限制） */
     private final ConcurrentHashMap<String, Long> lastPublishTimes = new ConcurrentHashMap<>();
+
+    /** 已对 proxy client 缺失发出 WARN 的车辆集合，避免重复 WARN 日志噪音 */
+    private final Set<String> proxyClientWarnedVehicles = ConcurrentHashMap.newKeySet();
 
     public MqttGateway(MqttClient mqttClient, ObjectMapper objectMapper,
                        MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry,
@@ -102,7 +106,21 @@ public class MqttGateway {
         if (ctx != null && ctx.getProxyMqttClient() != null) {
             return ctx.getProxyMqttClient();
         }
-        return sharedMqttClient;
+        String key = manufacturer + ":" + serialNumber;
+        if (proxyClientWarnedVehicles.add(key)) {
+            log.warn("Proxy client not available for vehicle {}:{}, skipping publish", manufacturer, serialNumber);
+        } else {
+            log.debug("Proxy client not available for vehicle {}:{}, skipping publish", manufacturer, serialNumber);
+        }
+        return null;
+    }
+
+    /**
+     * 重置指定车辆的 proxy client 缺失告警状态。
+     * 在车辆 proxy client 重新连接成功后调用，使下次断开时能再次产生 WARN 日志。
+     */
+    public void clearProxyClientWarning(String manufacturer, String serialNumber) {
+        proxyClientWarnedVehicles.remove(manufacturer + ":" + serialNumber);
     }
 
     /**
@@ -149,18 +167,27 @@ public class MqttGateway {
         if (isRateLimited("state", manufacturer, serialNumber)) {
             return false;
         }
-        return publish(resolveProxyClient(manufacturer, serialNumber),
-                topicResolver.stateTopic(manufacturer, serialNumber), state, 0, false);
+        MqttClient client = resolveProxyClient(manufacturer, serialNumber);
+        if (client == null) {
+            return false;
+        }
+        return publish(client, topicResolver.stateTopic(manufacturer, serialNumber), state, 0, false);
     }
 
     public boolean publishConnection(String manufacturer, String serialNumber, Connection connection) {
-        return publish(resolveProxyClient(manufacturer, serialNumber),
-                topicResolver.connectionTopic(manufacturer, serialNumber), connection, 1, true);
+        MqttClient client = resolveProxyClient(manufacturer, serialNumber);
+        if (client == null) {
+            return false;
+        }
+        return publish(client, topicResolver.connectionTopic(manufacturer, serialNumber), connection, 1, true);
     }
 
     public boolean publishFactsheet(String manufacturer, String serialNumber, Factsheet factsheet) {
-        return publish(resolveProxyClient(manufacturer, serialNumber),
-                topicResolver.factsheetTopic(manufacturer, serialNumber), factsheet, 0, false);
+        MqttClient client = resolveProxyClient(manufacturer, serialNumber);
+        if (client == null) {
+            return false;
+        }
+        return publish(client, topicResolver.factsheetTopic(manufacturer, serialNumber), factsheet, 0, false);
     }
 
     // ============ Server 模式便捷方法 ============

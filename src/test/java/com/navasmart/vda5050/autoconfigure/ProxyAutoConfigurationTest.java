@@ -5,6 +5,8 @@ import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.mqtt.MqttInboundRouter;
 import com.navasmart.vda5050.mqtt.MqttTopicResolver;
 import com.navasmart.vda5050.proxy.action.ActionHandlerRegistry;
+import com.navasmart.vda5050.proxy.callback.Vda5050ProxyStateProvider;
+import com.navasmart.vda5050.proxy.callback.Vda5050ProxyVehicleAdapter;
 import com.navasmart.vda5050.proxy.heartbeat.ProxyHeartbeatScheduler;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderStateMachine;
 import org.eclipse.paho.client.mqttv3.MqttClient;
@@ -46,19 +48,45 @@ class ProxyAutoConfigurationTest {
     void actionHandlerRegistryCreatedWhenProxyEnabled() {
         contextRunner
                 .withPropertyValues("vda5050.proxy.enabled=true")
+                .withBean(Vda5050ProxyVehicleAdapter.class, () -> mock(Vda5050ProxyVehicleAdapter.class))
+                .withBean(Vda5050ProxyStateProvider.class, () -> mock(Vda5050ProxyStateProvider.class))
                 .run(context -> {
                     assertThat(context).hasSingleBean(ActionHandlerRegistry.class);
                 });
     }
 
     @Test
-    void proxyOrderStateMachineNotCreatedWithoutAdapterBeans() {
+    void proxyEnabled_missingAdapterBeans_failsStartup() {
         contextRunner
                 .withPropertyValues("vda5050.proxy.enabled=true")
                 .run(context -> {
-                    // ProxyOrderStateMachine requires Vda5050ProxyVehicleAdapter and
-                    // Vda5050ProxyStateProvider which are user-provided beans
-                    assertThat(context).doesNotHaveBean(ProxyOrderStateMachine.class);
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasMessageContaining("Vda5050ProxyVehicleAdapter");
+                });
+    }
+
+    @Test
+    void proxyEnabled_missingOnlyStateProvider_failsStartup() {
+        contextRunner
+                .withPropertyValues("vda5050.proxy.enabled=true")
+                .withBean(Vda5050ProxyVehicleAdapter.class, () -> mock(Vda5050ProxyVehicleAdapter.class))
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasMessageContaining("Vda5050ProxyStateProvider");
+                });
+    }
+
+    @Test
+    void proxyEnabled_bothAdaptersProvided_startsSuccessfully() {
+        contextRunner
+                .withPropertyValues("vda5050.proxy.enabled=true")
+                .withBean(Vda5050ProxyVehicleAdapter.class, () -> mock(Vda5050ProxyVehicleAdapter.class))
+                .withBean(Vda5050ProxyStateProvider.class, () -> mock(Vda5050ProxyStateProvider.class))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(ActionHandlerRegistry.class);
                 });
     }
 }
