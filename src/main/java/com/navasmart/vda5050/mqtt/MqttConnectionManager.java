@@ -119,6 +119,8 @@ public class MqttConnectionManager {
                         log.error("Max reconnect attempts ({}) reached for shared client. Giving up.", maxAttempts);
                         try {
                             sharedMqttClient.disconnectForcibly();
+                            // Force close to prevent Paho from continuing automatic reconnect
+                            sharedMqttClient.close(true);
                         } catch (MqttException e) {
                             log.warn("Error disconnecting after max retries: {}", e.getMessage());
                         }
@@ -388,6 +390,8 @@ public class MqttConnectionManager {
                     if (client != null) {
                         try {
                             client.disconnectForcibly();
+                            // Force close to prevent Paho from continuing automatic reconnect
+                            client.close(true);
                         } catch (MqttException e) {
                             log.warn("Error disconnecting vehicle {} after max retries: {}",
                                     vehicleId, e.getMessage());
