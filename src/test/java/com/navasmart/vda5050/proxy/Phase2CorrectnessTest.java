@@ -15,6 +15,8 @@ import com.navasmart.vda5050.proxy.callback.ActionResult;
 import com.navasmart.vda5050.proxy.callback.NavigationResult;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyVehicleAdapter;
 import com.navasmart.vda5050.proxy.statemachine.ProxyClientState;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNavigationController;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNodeActionDispatcher;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
 import com.navasmart.vda5050.vehicle.VehicleContext;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
@@ -131,8 +133,12 @@ class Phase2CorrectnessTest {
             @Override public void onOrderCancel(String vehicleId) {}
         };
 
+        ProxyNodeActionDispatcher actionDispatcher = new ProxyNodeActionDispatcher(
+                actionHandlerRegistry, adapter, properties);
+        ProxyNavigationController navigationController = new ProxyNavigationController(
+                adapter, errorAggregator, actionDispatcher);
         executor = new ProxyOrderExecutor(vehicleRegistry, errorAggregator,
-                actionHandlerRegistry, adapter, properties, eventPublisher);
+                actionDispatcher, navigationController, adapter, properties, eventPublisher);
     }
 
     // ============ H1: handleFatalError calls adapter outside lock ============

@@ -7,6 +7,8 @@ import com.navasmart.vda5050.model.Node;
 import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.proxy.action.ActionHandlerRegistry;
 import com.navasmart.vda5050.proxy.statemachine.ProxyClientState;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNavigationController;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNodeActionDispatcher;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
 import com.navasmart.vda5050.test.MockProxyAdapter;
 import com.navasmart.vda5050.vehicle.VehicleContext;
@@ -42,20 +44,27 @@ class GracefulShutdownTest {
 
         adapter = new MockProxyAdapter();
 
-        executor = new ProxyOrderExecutor(registry,
-                new ErrorAggregator(new Vda5050ErrorFactory()),
-                new ActionHandlerRegistry(),
-                adapter, props, event -> {});
+        ErrorAggregator errorAggregator = new ErrorAggregator(new Vda5050ErrorFactory());
+        ProxyNodeActionDispatcher actionDispatcher = new ProxyNodeActionDispatcher(
+                new ActionHandlerRegistry(), adapter, props);
+        ProxyNavigationController navigationController = new ProxyNavigationController(
+                adapter, errorAggregator, actionDispatcher);
+        executor = new ProxyOrderExecutor(registry, errorAggregator,
+                actionDispatcher, navigationController, adapter, props, event -> {});
     }
 
     @Test
     void isIdleReturnsTrueWhenNoProxyVehiclesExist() {
         Vda5050Properties emptyProps = new Vda5050Properties();
         VehicleRegistry emptyRegistry = new VehicleRegistry(emptyProps);
-        ProxyOrderExecutor emptyExecutor = new ProxyOrderExecutor(emptyRegistry,
-                new ErrorAggregator(new Vda5050ErrorFactory()),
-                new ActionHandlerRegistry(),
-                new MockProxyAdapter(), emptyProps, event -> {});
+        MockProxyAdapter emptyAdapter = new MockProxyAdapter();
+        ErrorAggregator emptyErrorAgg = new ErrorAggregator(new Vda5050ErrorFactory());
+        ProxyNodeActionDispatcher emptyActionDispatcher = new ProxyNodeActionDispatcher(
+                new ActionHandlerRegistry(), emptyAdapter, emptyProps);
+        ProxyNavigationController emptyNavController = new ProxyNavigationController(
+                emptyAdapter, emptyErrorAgg, emptyActionDispatcher);
+        ProxyOrderExecutor emptyExecutor = new ProxyOrderExecutor(emptyRegistry, emptyErrorAgg,
+                emptyActionDispatcher, emptyNavController, emptyAdapter, emptyProps, event -> {});
 
         assertThat(emptyExecutor.isIdle()).isTrue();
     }

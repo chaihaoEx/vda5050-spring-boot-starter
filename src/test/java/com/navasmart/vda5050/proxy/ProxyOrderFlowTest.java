@@ -14,6 +14,8 @@ import com.navasmart.vda5050.proxy.action.ActionHandlerRegistry;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyStateProvider;
 import com.navasmart.vda5050.proxy.callback.Vda5050ProxyVehicleAdapter;
 import com.navasmart.vda5050.proxy.heartbeat.ProxyHeartbeatScheduler;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNavigationController;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNodeActionDispatcher;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderStateMachine;
 import com.navasmart.vda5050.test.EmbeddedMqttBroker;
@@ -131,13 +133,26 @@ class ProxyOrderFlowTest {
         }
 
         @Bean
+        public ProxyNodeActionDispatcher proxyNodeActionDispatcher(ActionHandlerRegistry actionHandlerRegistry,
+                                                                    Vda5050Properties properties) {
+            return new ProxyNodeActionDispatcher(actionHandlerRegistry, SHARED_ADAPTER, properties);
+        }
+
+        @Bean
+        public ProxyNavigationController proxyNavigationController(ErrorAggregator errorAggregator,
+                                                                    ProxyNodeActionDispatcher actionDispatcher) {
+            return new ProxyNavigationController(SHARED_ADAPTER, errorAggregator, actionDispatcher);
+        }
+
+        @Bean
         public ProxyOrderExecutor proxyOrderExecutor(VehicleRegistry vehicleRegistry,
                                                       ErrorAggregator errorAggregator,
-                                                      ActionHandlerRegistry actionHandlerRegistry,
+                                                      ProxyNodeActionDispatcher actionDispatcher,
+                                                      ProxyNavigationController navigationController,
                                                       Vda5050Properties properties,
                                                       org.springframework.context.ApplicationEventPublisher eventPublisher) {
-            return new ProxyOrderExecutor(vehicleRegistry, errorAggregator, actionHandlerRegistry,
-                    SHARED_ADAPTER, properties, eventPublisher);
+            return new ProxyOrderExecutor(vehicleRegistry, errorAggregator, actionDispatcher,
+                    navigationController, SHARED_ADAPTER, properties, eventPublisher);
         }
 
         @Bean

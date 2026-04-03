@@ -79,27 +79,28 @@
 
 ---
 
-## Phase 4 — ProxyOrderExecutor 拆分 + VehicleContext 锁分离
+## Phase 4 — ProxyOrderExecutor 拆分 + VehicleContext 锁分离 ✅ 已完成
 
 **分支**: `refactor/phase4-decompose-executor`  
 **依赖**: Phase 1-3 全部完成（锁规则、callback 模式已稳定）
 
-### ProxyOrderExecutor 拆分（~500 行 → 3 个类）
+### ProxyOrderExecutor 拆分（~565 行 → 3 个类）
 - **ProxyOrderExecutor** (保留): execute() 主循环、shutdown/isIdle、handleFatalError、事件发布
-- **ProxyNodeActionDispatcher** (新): processNode()、startAction()、allActionsTerminal()、findActionState()
-- **ProxyNavigationController** (新): advanceToNextNode()、导航 future 处理、waypoint 构建
+- **ProxyNodeActionDispatcher** (新): processNode()、startAction()、allActionsTerminal()、findActionState()、NodeProcessResult
+- **ProxyNavigationController** (新): advanceToNextNode()、导航 future 处理、waypoint 构建、edge action 启动
 
 ### VehicleContext 锁分离
 - 现有 `stateLock` → proxy 状态专用
 - 新增 `serverStateLock` → server 状态专用（lastReceivedState, lastSentOrder, connectionState, lastSeenTimestamp）
-- 新增 `lockServer()` / `unlockServer()` 方法
+- 新增 `lockServer()` / `unlockServer()` / `tryLockServer()` 方法
 - AgvStateTracker、ServerConnectionMonitor 改用 server 锁
 
 ### Circuit breaker 语义修正
-- disconnectForcibly() 后设 automaticReconnect=false 防止 Paho 继续重连
+- disconnectForcibly() 后调用 client.close(true) 防止 Paho 继续重连（shared client + per-vehicle client）
 
-**预估工作量**: 3 天  
-**测试**: 所有现有集成测试必须不变通过（回归门禁）
+### 测试新增（14 个测试用例）
+- `Phase4DecomposeTest` — 分解后 execute() 端到端验证（4 tests）、server 锁独立性（2 tests）、AgvStateTracker/ServerConnectionMonitor 使用 server 锁（2 tests）
+- `VehicleContextTest` — tryLockServer 获取/超时/独立性（3 tests）
 
 ---
 
@@ -128,7 +129,7 @@
 | 1 | Critical Safety ✅ | 8 CRITICAL | 已完成 | HeartbeatScheduler, VehicleContext, 10+11 models, SslUtil, MqttGateway, OrderDispatcher, InstantActionSender |
 | 2 | High Correctness ✅ | 5 HIGH | 已完成 | ProxyOrderExecutor, VehicleContext, AgvStateTracker, MqttGateway, ProxyAutoConfig |
 | 3 | Visibility + Spec ✅ | 6 MEDIUM | 已完成 | MqttInboundRouter, HealthIndicator, AutoConfig, InstantActionSender, ProxyOrderStateMachine, VehicleContext |
-| 4 | Decompose + Lock Split | 3 MEDIUM (结构性) | 3天 | ProxyOrderExecutor→3类, VehicleContext, MqttConnectionManager |
+| 4 | Decompose + Lock Split ✅ | 3 MEDIUM (结构性) | 已完成 | ProxyOrderExecutor→3类, VehicleContext, MqttConnectionManager |
 | 5 | Hardening + Polish | 6 项 | 2天 | AgvState, OrderDispatcher, HealthIndicator, 测试 |
 | **合计** | | **28 项** | **~12 天** | |
 

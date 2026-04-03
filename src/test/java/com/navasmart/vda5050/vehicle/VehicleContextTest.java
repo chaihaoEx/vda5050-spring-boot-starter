@@ -162,4 +162,60 @@ class VehicleContextTest {
         assertThat(ctx.isCancelledOrder("o1")).isFalse();
         assertThat(ctx.isCancelledOrder("o2")).isFalse();
     }
+
+    // ============ Server lock tests (Phase 4) ============
+
+    @Test
+    void tryLockServer_acquiresServerLock_whenAvailable() throws InterruptedException {
+        boolean acquired = ctx.tryLockServer(1, TimeUnit.SECONDS);
+        try {
+            assertThat(acquired).isTrue();
+        } finally {
+            if (acquired) {
+                ctx.unlockServer();
+            }
+        }
+    }
+
+    @Test
+    void tryLockServer_timesOut_whenServerLockHeld() throws InterruptedException {
+        CountDownLatch lockHeld = new CountDownLatch(1);
+        CountDownLatch testDone = new CountDownLatch(1);
+
+        Thread holder = new Thread(() -> {
+            ctx.lockServer();
+            try {
+                lockHeld.countDown();
+                testDone.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                ctx.unlockServer();
+            }
+        });
+        holder.start();
+
+        lockHeld.await(2, TimeUnit.SECONDS);
+
+        boolean acquired = ctx.tryLockServer(100, TimeUnit.MILLISECONDS);
+        assertThat(acquired).isFalse();
+
+        testDone.countDown();
+        holder.join(2000);
+    }
+
+    @Test
+    void serverLock_independentFromProxyLock() throws InterruptedException {
+        // Hold proxy lock, try server lock
+        ctx.lock();
+        try {
+            boolean serverAcquired = ctx.tryLockServer(0, TimeUnit.MILLISECONDS);
+            assertThat(serverAcquired)
+                    .as("Server lock should be acquirable while proxy lock is held by same thread")
+                    .isTrue();
+            ctx.unlockServer();
+        } finally {
+            ctx.unlock();
+        }
+    }
 }

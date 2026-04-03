@@ -9,6 +9,8 @@ import com.navasmart.vda5050.proxy.callback.Vda5050ProxyVehicleAdapter;
 import com.navasmart.vda5050.proxy.validation.OrderValidator;
 import com.navasmart.vda5050.proxy.heartbeat.ProxyConnectionPublisher;
 import com.navasmart.vda5050.proxy.heartbeat.ProxyHeartbeatScheduler;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNavigationController;
+import com.navasmart.vda5050.proxy.statemachine.ProxyNodeActionDispatcher;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderExecutor;
 import com.navasmart.vda5050.proxy.statemachine.ProxyOrderStateMachine;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
@@ -82,6 +84,30 @@ public class Vda5050ProxyAutoConfiguration {
     }
 
     /**
+     * 创建节点动作调度器，负责按 BlockingType 规则调度和执行节点上的动作。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(Vda5050ProxyVehicleAdapter.class)
+    public ProxyNodeActionDispatcher proxyNodeActionDispatcher(ActionHandlerRegistry actionHandlerRegistry,
+                                                               Vda5050ProxyVehicleAdapter vehicleAdapter,
+                                                               Vda5050Properties properties) {
+        return new ProxyNodeActionDispatcher(actionHandlerRegistry, vehicleAdapter, properties);
+    }
+
+    /**
+     * 创建导航控制器，负责节点推进、航点构建和异步导航管理。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(Vda5050ProxyVehicleAdapter.class)
+    public ProxyNavigationController proxyNavigationController(Vda5050ProxyVehicleAdapter vehicleAdapter,
+                                                                ErrorAggregator errorAggregator,
+                                                                ProxyNodeActionDispatcher actionDispatcher) {
+        return new ProxyNavigationController(vehicleAdapter, errorAggregator, actionDispatcher);
+    }
+
+    /**
      * 创建订单执行器，以 200ms 间隔轮询执行当前订单的导航和动作。
      *
      * <p>前置条件：需要用户提供 {@link Vda5050ProxyVehicleAdapter} Bean。</p>
@@ -91,12 +117,13 @@ public class Vda5050ProxyAutoConfiguration {
     @ConditionalOnBean(Vda5050ProxyVehicleAdapter.class)
     public ProxyOrderExecutor proxyOrderExecutor(VehicleRegistry vehicleRegistry,
                                                   ErrorAggregator errorAggregator,
-                                                  ActionHandlerRegistry actionHandlerRegistry,
+                                                  ProxyNodeActionDispatcher actionDispatcher,
+                                                  ProxyNavigationController navigationController,
                                                   Vda5050ProxyVehicleAdapter vehicleAdapter,
                                                   Vda5050Properties properties,
                                                   ApplicationEventPublisher eventPublisher) {
         return new ProxyOrderExecutor(vehicleRegistry, errorAggregator,
-                actionHandlerRegistry, vehicleAdapter, properties, eventPublisher);
+                actionDispatcher, navigationController, vehicleAdapter, properties, eventPublisher);
     }
 
     /**
