@@ -123,7 +123,9 @@ public class InstantActionSender {
         Action action = new Action();
         action.setActionId(UUID.randomUUID().toString());
         action.setActionType(actionType);
-        action.setBlockingType(BlockingType.NONE.getValue());
+        // VDA5050 spec: cancelOrder uses HARD blockingType; others use NONE
+        BlockingType blockingType = "cancelOrder".equals(actionType) ? BlockingType.HARD : BlockingType.NONE;
+        action.setBlockingType(blockingType.getValue());
         return send(vehicleId, Collections.singletonList(action));
     }
 }
