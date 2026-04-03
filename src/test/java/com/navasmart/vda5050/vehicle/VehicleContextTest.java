@@ -133,4 +133,33 @@ class VehicleContextTest {
         assertThat(ctx.isTimedOutAction("action-1")).isFalse();
         assertThat(ctx.getActionStartTimes()).isEmpty();
     }
+
+    // ============ cancelledOrderIds tests ============
+
+    @Test
+    void addCancelledOrderId_tracksOrder() {
+        ctx.addCancelledOrderId("order-1");
+
+        assertThat(ctx.isCancelledOrder("order-1")).isTrue();
+        assertThat(ctx.isCancelledOrder("order-2")).isFalse();
+    }
+
+    @Test
+    void removeCancelledOrderId_removesTracking() {
+        ctx.addCancelledOrderId("order-1");
+        ctx.removeCancelledOrderId("order-1");
+
+        assertThat(ctx.isCancelledOrder("order-1")).isFalse();
+    }
+
+    @Test
+    void clearCancelledOrderIds_clearsAll() {
+        ctx.addCancelledOrderId("o1");
+        ctx.addCancelledOrderId("o2");
+
+        ctx.clearCancelledOrderIds();
+
+        assertThat(ctx.isCancelledOrder("o1")).isFalse();
+        assertThat(ctx.isCancelledOrder("o2")).isFalse();
+    }
 }

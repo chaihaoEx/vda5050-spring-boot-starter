@@ -128,6 +128,7 @@ public class ProxyOrderStateMachine {
             ctx.setCurrentNodeIndex(0);
             ctx.setNextStopIndex(0);
             ctx.setReachedWaypoint(true);
+            ctx.clearCancelledOrderIds();
             initAgvState(ctx, order);
             ctx.setClientState(ProxyClientState.RUNNING);
             accepted = true;
@@ -158,13 +159,27 @@ public class ProxyOrderStateMachine {
      * @param instantActions 即时动作消息
      */
     public void receiveInstantActions(VehicleContext ctx, InstantActions instantActions) {
+        Factsheet pendingFactsheet = null;
+        String manufacturer;
+        String serialNumber;
+
         ctx.lock();
         try {
+            manufacturer = ctx.getManufacturer();
+            serialNumber = ctx.getSerialNumber();
             for (Action action : instantActions.getInstantActions()) {
-                processInstantAction(ctx, action);
+                Factsheet fs = processInstantAction(ctx, action);
+                if (fs != null) {
+                    pendingFactsheet = fs;
+                }
             }
         } finally {
             ctx.unlock();
+        }
+
+        // Publish factsheet outside lock to avoid I/O under lock
+        if (pendingFactsheet != null) {
+            mqttGateway.publishFactsheet(manufacturer, serialNumber, pendingFactsheet);
         }
     }
 
@@ -260,12 +275,16 @@ public class ProxyOrderStateMachine {
         errorAggregator.clearAllErrors(ctx);
     }
 
-    /** 处理单个即时动作：内置动作（cancelOrder 等）直接处理，其他加入 actionStates 由执行器异步处理 */
-    private void processInstantAction(VehicleContext ctx, Action action) {
+    /**
+     * 处理单个即时动作：内置动作（cancelOrder 等）直接处理，其他加入 actionStates 由执行器异步处理。
+     *
+     * @return 如果是 factsheetRequest 且成功获取了 Factsheet，返回待发布的 Factsheet；否则返回 null
+     */
+    private Factsheet processInstantAction(VehicleContext ctx, Action action) {
         // 检查重复的 actionId，避免重复处理同一动作
         for (ActionState as : ctx.getAgvState().getActionStates()) {
             if (as.getActionId().equals(action.getActionId())) {
-                return; // Already exists
+                return null; // Already exists
             }
         }
 
@@ -274,7 +293,7 @@ public class ProxyOrderStateMachine {
         switch (actionType) {
             case "cancelOrder" -> handleCancelOrder(ctx, action);
             case "startPause", "stopPause" -> handlePause(ctx, action, actionType);
-            case "factsheetRequest" -> handleFactsheetRequest(ctx, action);
+            case "factsheetRequest" -> { return handleFactsheetRequest(ctx, action); }
             default -> {
                 // 非内置动作：添加到 actionStates 队列，由 ProxyOrderExecutor 在执行循环中处理
                 ActionState as = new ActionState();
@@ -285,6 +304,7 @@ public class ProxyOrderStateMachine {
                 ctx.getAgvState().getActionStates().add(as);
             }
         }
+        return null;
     }
 
     private void handleCancelOrder(VehicleContext ctx, Action action) {
@@ -294,9 +314,17 @@ public class ProxyOrderStateMachine {
             return;
         }
 
+        // Record cancelled orderId to prevent async callbacks from overwriting state
+        Order currentOrder = ctx.getCurrentOrder();
+        if (currentOrder != null) {
+            ctx.addCancelledOrderId(currentOrder.getOrderId());
+        }
+
         vehicleAdapter.onOrderCancel(ctx.getVehicleId());
         ctx.setClientState(ProxyClientState.IDLE);
         ctx.setCurrentOrder(null);
+        ctx.clearActionStartTimes();
+        ctx.setNavigationStartTime(0);
         addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
         log.info("Vehicle {} order cancelled", ctx.getVehicleId());
     }
@@ -323,18 +351,25 @@ public class ProxyOrderStateMachine {
         }
     }
 
-    private void handleFactsheetRequest(VehicleContext ctx, Action action) {
+    /**
+     * 处理 factsheetRequest：在锁内收集 Factsheet 数据并设置 header，返回待发布的 Factsheet。
+     * 实际 MQTT 发布由调用方在锁外执行。
+     *
+     * @return 待发布的 Factsheet，无数据时返回 null
+     */
+    private Factsheet handleFactsheetRequest(VehicleContext ctx, Action action) {
         try {
             Factsheet factsheet = stateProvider.getFactsheet(ctx.getVehicleId());
             if (factsheet != null) {
                 factsheet.setHeaderId(ctx.nextStateHeaderId());
                 factsheet.setManufacturer(ctx.getManufacturer());
                 factsheet.setSerialNumber(ctx.getSerialNumber());
-                mqttGateway.publishFactsheet(ctx.getManufacturer(), ctx.getSerialNumber(), factsheet);
             }
             addInstantActionState(ctx, action, ActionStatus.FINISHED, null);
+            return factsheet;
         } catch (Exception e) {
             addInstantActionState(ctx, action, ActionStatus.FAILED, e.getMessage());
+            return null;
         }
     }
 
