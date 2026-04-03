@@ -7,7 +7,9 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -87,6 +89,9 @@ public class VehicleContext {
 
     /** actionId → 动作开始时间（epoch 毫秒），需持锁访问 */
     private final Map<String, Long> actionStartTimes = new HashMap<>();
+
+    /** 因超时而被标记为 FAILED 的 actionId 集合，用于防止异步回调覆盖超时结果 */
+    private final Set<String> timedOutActionIds = new HashSet<>();
 
     /**
      * Proxy 模式专属 MQTT 客户端（每辆 Proxy 车辆独立），支持独立 LWT。
@@ -224,7 +229,18 @@ public class VehicleContext {
 
     public void removeActionStartTime(String actionId) { actionStartTimes.remove(actionId); }
 
-    public void clearActionStartTimes() { actionStartTimes.clear(); }
+    public void clearActionStartTimes() {
+        actionStartTimes.clear();
+        timedOutActionIds.clear();
+    }
+
+    public void addTimedOutActionId(String actionId) { timedOutActionIds.add(actionId); }
+
+    public boolean isTimedOutAction(String actionId) { return timedOutActionIds.contains(actionId); }
+
+    public void removeTimedOutActionId(String actionId) { timedOutActionIds.remove(actionId); }
+
+    public void clearTimedOutActionIds() { timedOutActionIds.clear(); }
 
     public MqttClient getProxyMqttClient() { return proxyMqttClient; }
     public void setProxyMqttClient(MqttClient proxyMqttClient) { this.proxyMqttClient = proxyMqttClient; }

@@ -133,6 +133,9 @@ public class ProxyOrderExecutor {
      */
     private void executeForVehicle(VehicleContext ctx) {
         OrderCompletionInfo completionInfo = null;
+        boolean needsCancelNavigation = false;
+        String cancelVehicleId = null;
+        List<String> cancelledActionIds = new ArrayList<>();
 
         ctx.lock();
         try {
@@ -146,56 +149,61 @@ public class ProxyOrderExecutor {
                 return;
             }
 
+            cancelVehicleId = ctx.getVehicleId();
+
             // 第一步：检查是否存在 FATAL 错误，如有则中止订单并取消导航
             if (errorAggregator.hasFatalError(ctx)) {
+                needsCancelNavigation = true;
                 handleFatalError(ctx);
                 completionInfo = new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), true);
-                return;
-            }
-
-            // 第二步：导航进行中时检查超时；未超时则等待导航完成回调
-            if (!ctx.isReachedWaypoint()) {
+            } else if (!ctx.isReachedWaypoint()) {
+                // 第二步：导航进行中时检查超时；未超时则等待导航完成回调
                 long start = ctx.getNavigationStartTime();
                 long timeout = properties.getProxy().getNavigationTimeoutMs();
                 if (start > 0 && timeout > 0 && (System.currentTimeMillis() - start) > timeout) {
                     log.warn("Vehicle {} navigation timeout ({}ms), aborting order",
                             ctx.getVehicleId(), timeout);
                     errorAggregator.addFatalError(ctx, "Navigation timeout", "navigationTimeout");
+                    needsCancelNavigation = true;
                     handleFatalError(ctx);
                     completionInfo = new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), true);
                 }
-                return;
-            }
+            } else {
+                // 第三步：车辆已到达当前路径点，处理节点动作
+                int nodeIndex = ctx.getCurrentNodeIndex();
+                List<Node> nodes = order.getNodes();
 
-            // 第三步：车辆已到达当前路径点，处理节点动作
-            int nodeIndex = ctx.getCurrentNodeIndex();
-            List<Node> nodes = order.getNodes();
+                if (nodes == null || nodeIndex >= nodes.size()) {
+                    // 所有节点已遍历，但需等待所有 action（含 edge action）到达终态
+                    if (allActionsTerminal(ctx)) {
+                        log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
+                        ctx.setClientState(ProxyClientState.IDLE);
+                        ctx.getAgvState().setDriving(false);
+                        completionInfo = new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), false);
+                    }
+                } else {
+                    // 处理当前节点上的动作（按 BlockingType 调度）
+                    Node currentNode = nodes.get(nodeIndex);
+                    NodeProcessResult result = processNode(ctx, currentNode, cancelledActionIds);
 
-            if (nodes == null || nodeIndex >= nodes.size()) {
-                // 所有节点已遍历，但需等待所有 action（含 edge action）到达终态
-                if (allActionsTerminal(ctx)) {
-                    log.info("Vehicle {} order {} completed", ctx.getVehicleId(), order.getOrderId());
-                    ctx.setClientState(ProxyClientState.IDLE);
-                    ctx.getAgvState().setDriving(false);
-                    completionInfo = new OrderCompletionInfo(ctx.getVehicleId(), order.getOrderId(), false);
+                    if (result == NodeProcessResult.ALL_ACTIONS_DONE) {
+                        // 当前节点所有动作完成，推进到下一节点并发起导航
+                        completionInfo = advanceToNextNode(ctx);
+                    }
+                    // 如果 result == WAITING，说明还有动作在执行中，等下一轮循环再检查
                 }
-                return;
             }
-
-            // 处理当前节点上的动作（按 BlockingType 调度）
-            Node currentNode = nodes.get(nodeIndex);
-            NodeProcessResult result = processNode(ctx, currentNode);
-
-            if (result == NodeProcessResult.ALL_ACTIONS_DONE) {
-                // 当前节点所有动作完成，推进到下一节点并发起导航
-                completionInfo = advanceToNextNode(ctx);
-            }
-            // 如果 result == WAITING，说明还有动作在执行中，等下一轮循环再检查
         } finally {
             ctx.unlock();
         }
 
-        // 事件在锁外发布
+        // 适配器回调和事件在锁外执行
+        if (needsCancelNavigation) {
+            vehicleAdapter.onNavigationCancel(cancelVehicleId);
+        }
+        for (String actionId : cancelledActionIds) {
+            vehicleAdapter.onActionCancel(cancelVehicleId, actionId);
+        }
         if (completionInfo != null) {
             if (completionInfo.failed) {
                 eventPublisher.publishEvent(new OrderFailedEvent(
@@ -222,7 +230,7 @@ public class ProxyOrderExecutor {
      * @param node 当前处理的节点
      * @return WAITING 表示还有动作未完成，ALL_ACTIONS_DONE 表示可以推进到下一节点
      */
-    private NodeProcessResult processNode(VehicleContext ctx, Node node) {
+    private NodeProcessResult processNode(VehicleContext ctx, Node node, List<String> cancelledActionIds) {
         boolean stopDriving = false;
         boolean hasRunningHard = false;
 
@@ -251,7 +259,8 @@ public class ProxyOrderExecutor {
                     actionState.setActionStatus(ActionStatus.FAILED.getValue());
                     actionState.setResultDescription("Action timeout");
                     ctx.removeActionStartTime(action.getActionId());
-                    vehicleAdapter.onActionCancel(ctx.getVehicleId(), action.getActionId());
+                    ctx.addTimedOutActionId(action.getActionId());
+                    cancelledActionIds.add(action.getActionId());
                     // 超时后 action 变为 FAILED，下一轮循环继续推进
                     continue;
                 }
@@ -352,8 +361,8 @@ public class ProxyOrderExecutor {
                 }
 
                 // 如果已被超时检测标记为 FAILED，不再覆盖结果
-                if (ActionStatus.FAILED.getValue().equals(as.getActionStatus())
-                        && "Action timeout".equals(as.getResultDescription())) {
+                if (ctx.isTimedOutAction(actionId)) {
+                    ctx.removeTimedOutActionId(actionId);
                     return;
                 }
 
@@ -504,7 +513,6 @@ public class ProxyOrderExecutor {
 
     private void handleFatalError(VehicleContext ctx) {
         log.error("Vehicle {} has fatal error, aborting order", ctx.getVehicleId());
-        vehicleAdapter.onNavigationCancel(ctx.getVehicleId());
         ctx.setClientState(ProxyClientState.IDLE);
         ctx.getAgvState().setDriving(false);
         ctx.setNavigationStartTime(0);
