@@ -18,14 +18,29 @@ import java.util.concurrent.locks.ReentrantLock;
  * 单车状态上下文容器，持有一辆 AGV 在 Proxy 模式和 Server 模式下的全部运行时状态。
  *
  * <h2>线程安全</h2>
- * <p>本类<b>不是</b>天然线程安全的。对 Proxy/Server 状态字段的读写必须在持有 {@link #lock()} 的前提下进行。
- * 典型用法：</p>
+ * <p>本类<b>不是</b>天然线程安全的。使用两把独立的锁分别保护 Proxy 和 Server 状态：</p>
+ * <ul>
+ *   <li><b>Proxy 锁</b>（{@link #lock()}/{@link #unlock()}）：保护 {@code agvState}、{@code currentOrder}、
+ *       {@code clientState} 等 Proxy 模式字段</li>
+ *   <li><b>Server 锁</b>（{@link #lockServer()}/{@link #unlockServer()}）：保护 {@code lastReceivedState}、
+ *       {@code lastSentOrder}、{@code connectionState}、{@code lastSeenTimestamp} 等 Server 模式字段</li>
+ * </ul>
+ * <p>典型用法：</p>
  * <pre>
+ *   // Proxy 状态操作
  *   ctx.lock();
  *   try {
  *       // 读写 agvState、currentOrder 等字段
  *   } finally {
  *       ctx.unlock();
+ *   }
+ *
+ *   // Server 状态操作
+ *   ctx.lockServer();
+ *   try {
+ *       // 读写 lastReceivedState、connectionState 等字段
+ *   } finally {
+ *       ctx.unlockServer();
  *   }
  * </pre>
  * <p>Header ID 生成器（{@code nextStateHeaderId()} 等）基于 {@link AtomicInteger}，可在无锁场景下安全调用。</p>
@@ -53,8 +68,11 @@ public class VehicleContext {
 
     // ============ 锁 ============
 
-    /** 可重入锁，保护 Proxy/Server 模式下的可变状态字段 */
+    /** 可重入锁，保护 Proxy 模式下的可变状态字段 */
     private final ReentrantLock stateLock = new ReentrantLock();
+
+    /** 可重入锁，保护 Server 模式下的可变状态字段（lastReceivedState, lastSentOrder, connectionState, lastSeenTimestamp） */
+    private final ReentrantLock serverStateLock = new ReentrantLock();
 
     // ============ 模式标志 ============
 
@@ -102,7 +120,7 @@ public class VehicleContext {
      */
     private MqttClient proxyMqttClient;
 
-    // ============ Server 模式状态（需持锁访问） ============
+    // ============ Server 模式状态（需持 serverStateLock 访问） ============
 
     /** 最后一次从 AGV 收到的状态消息 */
     private AgvState lastReceivedState;
@@ -162,6 +180,29 @@ public class VehicleContext {
      */
     public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException {
         return stateLock.tryLock(timeout, unit);
+    }
+
+    /**
+     * 获取 Server 模式状态锁。调用方必须在 {@code finally} 块中调用 {@link #unlockServer()}。
+     * 保护 {@code lastReceivedState}、{@code lastSentOrder}、{@code connectionState}、{@code lastSeenTimestamp}。
+     */
+    public void lockServer() { serverStateLock.lock(); }
+
+    /**
+     * 释放 Server 模式状态锁。
+     */
+    public void unlockServer() { serverStateLock.unlock(); }
+
+    /**
+     * 尝试在指定超时内获取 Server 模式状态锁。
+     *
+     * @param timeout 最大等待时间
+     * @param unit    时间单位
+     * @return 是否成功获取锁
+     * @throws InterruptedException 等待过程中被中断
+     */
+    public boolean tryLockServer(long timeout, TimeUnit unit) throws InterruptedException {
+        return serverStateLock.tryLock(timeout, unit);
     }
 
     /**

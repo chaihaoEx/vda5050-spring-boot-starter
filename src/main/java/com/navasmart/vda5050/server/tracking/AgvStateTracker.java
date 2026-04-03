@@ -63,7 +63,7 @@ public class AgvStateTracker {
         List<Runnable> callbacks = new ArrayList<>();
         List<ApplicationEvent> events = new ArrayList<>();
 
-        ctx.lock();
+        ctx.lockServer();
         try {
             AgvState prevState = ctx.getLastReceivedState();
             ctx.setLastReceivedState(newState);
@@ -91,7 +91,7 @@ public class AgvStateTracker {
             // 错误变更检测
             collectErrorChanges(vehicleId, prevState, newState, callbacks, events);
         } finally {
-            ctx.unlock();
+            ctx.unlockServer();
         }
 
         // 在锁外执行所有回调和发布事件

@@ -63,7 +63,7 @@ public class ServerConnectionMonitor {
             String vehicleId = null;
             String formattedTimestamp = null;
 
-            ctx.lock();
+            ctx.lockServer();
             try {
                 long lastSeen = ctx.getLastSeenTimestamp();
                 if (lastSeen > 0 && (now - lastSeen) > timeout) {
@@ -71,7 +71,7 @@ public class ServerConnectionMonitor {
                     formattedTimestamp = TimestampUtil.format(lastSeen);
                 }
             } finally {
-                ctx.unlock();
+                ctx.unlockServer();
             }
 
             // 回调和事件在锁外执行，避免死锁
@@ -100,13 +100,13 @@ public class ServerConnectionMonitor {
         String prevState;
         boolean stateChanged;
 
-        ctx.lock();
+        ctx.lockServer();
         try {
             prevState = ctx.getConnectionState();
             ctx.setConnectionState(connection.getConnectionState());
             stateChanged = !connection.getConnectionState().equals(prevState);
         } finally {
-            ctx.unlock();
+            ctx.unlockServer();
         }
 
         // 回调和事件在锁外执行
