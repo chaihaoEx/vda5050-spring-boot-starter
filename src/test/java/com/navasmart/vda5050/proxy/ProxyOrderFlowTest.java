@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -227,9 +228,7 @@ class ProxyOrderFlowTest {
         byte[] iaPayload = objectMapper.writeValueAsBytes(instantActions);
         testClient.publish(TOPIC_PREFIX + "/instantActions", new MqttMessage(iaPayload));
 
-        // Wait for processing
-        Thread.sleep(1000);
-        assertTrue(mockAdapter.orderCancelCalled.get(),
+        assertTrue(awaitCondition(mockAdapter.orderCancelCalled, 5, TimeUnit.SECONDS),
                 "onOrderCancel should have been called after sending cancelOrder");
     }
 
@@ -258,8 +257,8 @@ class ProxyOrderFlowTest {
         byte[] pausePayload = objectMapper.writeValueAsBytes(pauseActions);
         testClient.publish(TOPIC_PREFIX + "/instantActions", new MqttMessage(pausePayload));
 
-        Thread.sleep(1000);
-        assertTrue(mockAdapter.pauseCalled.get(), "onPause should have been called");
+        assertTrue(awaitCondition(mockAdapter.pauseCalled, 5, TimeUnit.SECONDS),
+                "onPause should have been called");
 
         // Send stopPause
         InstantActions resumeActions = new InstantActions();
@@ -278,8 +277,20 @@ class ProxyOrderFlowTest {
         byte[] resumePayload = objectMapper.writeValueAsBytes(resumeActions);
         testClient.publish(TOPIC_PREFIX + "/instantActions", new MqttMessage(resumePayload));
 
-        Thread.sleep(1000);
-        assertTrue(mockAdapter.resumeCalled.get(), "onResume should have been called");
+        assertTrue(awaitCondition(mockAdapter.resumeCalled, 5, TimeUnit.SECONDS),
+                "onResume should have been called");
+    }
+
+    private static boolean awaitCondition(AtomicBoolean flag, long timeout, TimeUnit unit)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + unit.toNanos(timeout);
+        while (!flag.get()) {
+            if (System.nanoTime() >= deadline) {
+                return false;
+            }
+            Thread.sleep(50);
+        }
+        return true;
     }
 
     private Order buildSimpleOrder(String orderId) {

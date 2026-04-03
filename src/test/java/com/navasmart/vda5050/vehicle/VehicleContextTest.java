@@ -163,6 +163,35 @@ class VehicleContextTest {
         assertThat(ctx.isCancelledOrder("o2")).isFalse();
     }
 
+    // ============ completedOrderIds tests ============
+
+    @Test
+    void addCompletedOrderId_tracksOrder() {
+        ctx.addCompletedOrderId("order-1");
+
+        assertThat(ctx.isCompletedOrder("order-1")).isTrue();
+        assertThat(ctx.isCompletedOrder("order-2")).isFalse();
+    }
+
+    @Test
+    void removeCompletedOrderId_removesTracking() {
+        ctx.addCompletedOrderId("order-1");
+        ctx.removeCompletedOrderId("order-1");
+
+        assertThat(ctx.isCompletedOrder("order-1")).isFalse();
+    }
+
+    @Test
+    void clearCompletedOrderIds_clearsAll() {
+        ctx.addCompletedOrderId("o1");
+        ctx.addCompletedOrderId("o2");
+
+        ctx.clearCompletedOrderIds();
+
+        assertThat(ctx.isCompletedOrder("o1")).isFalse();
+        assertThat(ctx.isCompletedOrder("o2")).isFalse();
+    }
+
     // ============ Server lock tests (Phase 4) ============
 
     @Test
