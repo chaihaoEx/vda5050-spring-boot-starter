@@ -104,21 +104,25 @@
 
 ---
 
-## Phase 5 — Model 加固 + 可观测性 + 最终打磨
+## Phase 5 — Model 加固 + 可观测性 + 最终打磨 ✅ 已完成
 
 **分支**: `feat/phase5-hardening-polish`  
 **依赖**: Phase 4
 
+### 修复项
+
 | # | 改进 | 说明 |
 |---|------|------|
-| 1 | AgvState 拷贝构造函数 | 支持心跳调度器 snapshot 模式（锁内拷贝，锁外序列化发布） |
-| 2 | 双重完成防护 | VehicleContext 新增 `completedOrderIds` Set，防止 order completion callback 重复触发 |
-| 3 | FATAL 预检 | OrderDispatcher.sendOrder() 先检查 errorAggregator.hasFatalError()，拒绝向错误状态车辆下发订单 |
-| 4 | Health indicator 重连计数 | 暴露 reconnectAttempts / consecutiveDisconnects 到 health detail |
-| 5 | 启动摘要日志 | ApplicationReadyEvent listener 打印模式、车辆数、SSL 状态 |
-| 6 | 测试去 Thread.sleep | ProxyOrderFlowTest 中 3 处 Thread.sleep(1000) 改为 polling + timeout |
+| 1 | AgvState 拷贝构造函数 | `AgvState(AgvState src)` 拷贝构造函数，ProxyHeartbeatScheduler 中 `copyAgvState()` 方法替换为 `new AgvState(agvState)` |
+| 2 | 双重完成防护 | VehicleContext 新增 `completedOrderIds` Set（add/is/remove/clear），AgvStateTracker.collectOrderCompletion 中检查防重复，OrderDispatcher.sendOrder 时清除 |
+| 3 | FATAL 预检 | OrderDispatcher 注入 ErrorAggregator，sendOrder() 先检查 `hasFatalError()`，拒绝向错误状态车辆下发订单 |
+| 4 | Health indicator 重连计数 | VehicleContext 新增 `reconnectAttempts` AtomicInteger，MqttConnectionManager 新增 `getConsecutiveDisconnects()`，MqttHealthIndicator 暴露两个计数器到 health detail |
+| 5 | 启动摘要日志 | Vda5050AutoConfiguration 添加 `@EventListener(ApplicationReadyEvent)` 打印模式、车辆数、SSL 状态、broker 地址 |
+| 6 | 测试去 Thread.sleep | ProxyOrderFlowTest 中 3 处 `Thread.sleep(1000)` 改为 `awaitCondition()` 轮询 + 5s 超时 |
 
-**预估工作量**: 2 天
+### 测试新增（11 个测试用例）
+- `Phase5HardeningTest` — AgvState 拷贝构造函数（3 tests）、FATAL 预检拒绝/通过（2 tests）、双重完成防护（2 tests）、completedOrderIds 清除（1 test）、reconnectAttempts（1 test）
+- `VehicleContextTest` — completedOrderIds add/remove/clear（3 tests）
 
 ---
 
@@ -130,7 +134,7 @@
 | 2 | High Correctness ✅ | 5 HIGH | 已完成 | ProxyOrderExecutor, VehicleContext, AgvStateTracker, MqttGateway, ProxyAutoConfig |
 | 3 | Visibility + Spec ✅ | 6 MEDIUM | 已完成 | MqttInboundRouter, HealthIndicator, AutoConfig, InstantActionSender, ProxyOrderStateMachine, VehicleContext |
 | 4 | Decompose + Lock Split ✅ | 3 MEDIUM (结构性) | 已完成 | ProxyOrderExecutor→3类, VehicleContext, MqttConnectionManager |
-| 5 | Hardening + Polish | 6 项 | 2天 | AgvState, OrderDispatcher, HealthIndicator, 测试 |
+| 5 | Hardening + Polish ✅ | 6 项 | 已完成 | AgvState, VehicleContext, OrderDispatcher, HealthIndicator, AutoConfiguration, 测试 |
 | **合计** | | **28 项** | **~12 天** | |
 
 ## 验证方式
