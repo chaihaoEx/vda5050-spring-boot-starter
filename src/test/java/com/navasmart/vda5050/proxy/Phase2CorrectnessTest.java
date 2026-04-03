@@ -55,6 +55,9 @@ class Phase2CorrectnessTest {
     private final AtomicBoolean lockHeldDuringNavigationCancel = new AtomicBoolean(false);
     private final AtomicBoolean lockHeldDuringActionCancel = new AtomicBoolean(false);
 
+    /** Controllable future for action execution — tests can complete it after timeout */
+    private volatile CompletableFuture<ActionResult> actionFuture;
+
     private Vda5050ProxyVehicleAdapter adapter;
 
     @BeforeEach
@@ -103,8 +106,8 @@ class Phase2CorrectnessTest {
             @Override
             public CompletableFuture<ActionResult> onActionExecute(String vehicleId,
                     com.navasmart.vda5050.model.Action action) {
-                // Return a future that never completes (simulates long-running action)
-                return new CompletableFuture<>();
+                actionFuture = new CompletableFuture<>();
+                return actionFuture;
             }
 
             @Override
@@ -276,6 +279,114 @@ class Phase2CorrectnessTest {
             assertThat(ctx.isTimedOutAction("act-1"))
                     .as("Timed out action should be tracked in timedOutActionIds set")
                     .isTrue();
+        } finally {
+            ctx.unlock();
+        }
+    }
+
+    @Test
+    void asyncCallback_doesNotOverwriteTimedOutAction() throws Exception {
+        // Set up: action starts, runs, times out, then async callback arrives with success
+        Action action = new Action();
+        action.setActionId("act-1");
+        action.setActionType("testAction");
+        action.setBlockingType(BlockingType.HARD.getValue());
+
+        ActionState actionState = new ActionState();
+        actionState.setActionId("act-1");
+        actionState.setActionStatus(ActionStatus.WAITING.getValue());
+
+        Node node = new Node();
+        node.setNodeId("node-1");
+        node.setSequenceId(0);
+        node.setReleased(true);
+        node.setActions(List.of(action));
+
+        Order order = new Order();
+        order.setOrderId("order-1");
+        order.setOrderUpdateId(0);
+        order.setNodes(List.of(node));
+        order.setEdges(new ArrayList<>());
+
+        ctx.lock();
+        try {
+            ctx.setClientState(ProxyClientState.RUNNING);
+            ctx.setReachedWaypoint(true);
+            ctx.setCurrentNodeIndex(0);
+            ctx.setCurrentOrder(order);
+            ctx.getAgvState().setActionStates(new ArrayList<>(List.of(actionState)));
+        } finally {
+            ctx.unlock();
+        }
+
+        // Step 1: first execute() starts the action (WAITING → RUNNING)
+        executor.execute();
+        assertThat(actionFuture).as("Action future should be created").isNotNull();
+
+        // Step 2: simulate timeout by backdating the start time
+        ctx.lock();
+        try {
+            ctx.putActionStartTime("act-1", 1); // long ago → will timeout
+        } finally {
+            ctx.unlock();
+        }
+
+        // Step 3: execute() detects timeout → marks FAILED + adds to timedOutActionIds
+        executor.execute();
+
+        ctx.lock();
+        try {
+            ActionState as = ctx.getAgvState().getActionStates().stream()
+                    .filter(s -> "act-1".equals(s.getActionId()))
+                    .findFirst().orElseThrow();
+            assertThat(as.getActionStatus()).isEqualTo(ActionStatus.FAILED.getValue());
+            assertThat(ctx.isTimedOutAction("act-1")).isTrue();
+        } finally {
+            ctx.unlock();
+        }
+
+        // Step 4: async callback arrives with success — should NOT overwrite FAILED
+        actionFuture.complete(ActionResult.success());
+
+        // Give the whenComplete callback time to execute
+        Thread.sleep(200);
+
+        ctx.lock();
+        try {
+            ActionState as = ctx.getAgvState().getActionStates().stream()
+                    .filter(s -> "act-1".equals(s.getActionId()))
+                    .findFirst().orElseThrow();
+            assertThat(as.getActionStatus())
+                    .as("Timed-out action status should remain FAILED after async callback")
+                    .isEqualTo(ActionStatus.FAILED.getValue());
+        } finally {
+            ctx.unlock();
+        }
+    }
+
+    // ============ MEDIUM-3: handleFatalError clears currentOrder ============
+
+    @Test
+    void handleFatalError_clearsCurrentOrder() {
+        ctx.lock();
+        try {
+            ctx.setClientState(ProxyClientState.RUNNING);
+            ctx.setReachedWaypoint(true);
+            ctx.setCurrentNodeIndex(0);
+            ctx.setCurrentOrder(createSimpleOrder("order-1", 1));
+        } finally {
+            ctx.unlock();
+        }
+
+        errorAggregator.addFatalError(ctx, "Test error", "testError");
+        executor.execute();
+
+        ctx.lock();
+        try {
+            assertThat(ctx.getCurrentOrder())
+                    .as("currentOrder should be null after fatal error")
+                    .isNull();
+            assertThat(ctx.getClientState()).isEqualTo(ProxyClientState.IDLE);
         } finally {
             ctx.unlock();
         }

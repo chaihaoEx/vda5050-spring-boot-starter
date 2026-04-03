@@ -514,6 +514,7 @@ public class ProxyOrderExecutor {
     private void handleFatalError(VehicleContext ctx) {
         log.error("Vehicle {} has fatal error, aborting order", ctx.getVehicleId());
         ctx.setClientState(ProxyClientState.IDLE);
+        ctx.setCurrentOrder(null);
         ctx.getAgvState().setDriving(false);
         ctx.setNavigationStartTime(0);
         ctx.clearActionStartTimes();

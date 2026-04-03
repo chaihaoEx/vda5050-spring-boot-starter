@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -50,6 +51,9 @@ public class MqttGateway {
 
     /** 每种 Topic 类型的最近发布时间戳（用于速率限制） */
     private final ConcurrentHashMap<String, Long> lastPublishTimes = new ConcurrentHashMap<>();
+
+    /** 已对 proxy client 缺失发出 WARN 的车辆集合，避免重复 WARN 日志噪音 */
+    private final Set<String> proxyClientWarnedVehicles = ConcurrentHashMap.newKeySet();
 
     public MqttGateway(MqttClient mqttClient, ObjectMapper objectMapper,
                        MqttTopicResolver topicResolver, VehicleRegistry vehicleRegistry,
@@ -102,7 +106,12 @@ public class MqttGateway {
         if (ctx != null && ctx.getProxyMqttClient() != null) {
             return ctx.getProxyMqttClient();
         }
-        log.warn("Proxy client not available for vehicle {}:{}, skipping publish", manufacturer, serialNumber);
+        String key = manufacturer + ":" + serialNumber;
+        if (proxyClientWarnedVehicles.add(key)) {
+            log.warn("Proxy client not available for vehicle {}:{}, skipping publish", manufacturer, serialNumber);
+        } else {
+            log.debug("Proxy client not available for vehicle {}:{}, skipping publish", manufacturer, serialNumber);
+        }
         return null;
     }
 
