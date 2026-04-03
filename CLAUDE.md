@@ -11,13 +11,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 mvn verify --batch-mode --no-transfer-progress  # CI-style (if mvnw download fails in China)
 ```
 
-97 tests (unit + integration) across 23 files in `src/test/java/`. JUnit 5 via `spring-boot-starter-test`. Integration tests use Moquette embedded MQTT broker (`io.moquette:moquette-broker:0.17`, test scope).
+242 tests (unit + integration) across 30+ files in `src/test/java/`. JUnit 5 via `spring-boot-starter-test`. Integration tests use Moquette embedded MQTT broker (`io.moquette:moquette-broker:0.17`, test scope).
 
 ### Test Categories
 - **Unit tests**: `TimestampUtilTest`, `Vda5050PropertiesTest`, `MqttTopicResolverTest`, `ModelSerializationTest`, `ErrorHandlingTest`
 - **Auto-config tests**: `AutoConfigurationTest`, `ProxyAutoConfigurationTest`, `ServerAutoConfigurationTest`, `ConfigValidationTest` (use `ApplicationContextRunner`)
 - **Integration tests**: `ProxyOrderFlowTest`, `ProxyActionHandlerTest`, `ServerOrderDispatchTest`, `ServerStateTrackingTest`, `GracefulShutdownTest` (use `@SpringBootTest` + embedded broker)
 - **Feature tests**: `OrderValidatorTest`, `SslConfigTest`, `MqttHealthIndicatorTest`, `MalformedMessageTest`, `DynamicVehicleRegistrationTest`, `AdapterCallbackExceptionTest`
+- **Phase tests**: `Phase2CorrectnessTest`, `Phase3VisibilitySpecTest`, `Phase4DecomposeTest`, `Phase5HardeningTest` (lock-outside-callback verification, timedOutActionIds/cancelledOrderIds guard tests, decomposition regression tests)
+- **Layer tests**: `MqttGatewayProxyClientTest`, `VehicleContextTest` (dual-lock independence, Set-based guard CRUD)
 - **Test infra**: `EmbeddedMqttBroker`, `MockProxyAdapter`, `MockServerAdapter` in `test/` package
 
 ## CI
@@ -59,7 +61,7 @@ VDA5050 Spring Boot Starter — a Java/Spring Boot library (not an application) 
 Registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`.
 
 ### Data Models (`model/`, 35 files)
-28 POJOs + 7 enums covering all VDA5050 message types. All use `@JsonInclude(NON_NULL)`. Enum fields in POJOs use String type for JSON compatibility; enum classes provide `@JsonValue`/`@JsonCreator`. Note: `com.navasmart.vda5050.model.Error` conflicts with `java.lang.Error` — use fully qualified name when both are in scope.
+28 POJOs + 7 enums covering all VDA5050 message types. All use `@JsonInclude(NON_NULL)`. Enum fields in POJOs use String type for JSON compatibility; enum classes provide `@JsonValue`/`@JsonCreator`. Model list setters perform defensive copy (`new ArrayList<>(list)`). `AgvState` has a copy constructor for lock-inside-snapshot, unlock-then-serialize pattern (used by `ProxyHeartbeatScheduler`). 11 model classes have `equals`/`hashCode` based on business IDs. Note: `com.navasmart.vda5050.model.Error` conflicts with `java.lang.Error` — use fully qualified name when both are in scope.
 
 ### MQTT Layer (`mqtt/`, 5 files)
 - `MqttTopicResolver`: builds topic paths `{interfaceName}/{majorVersion}/{manufacturer}/{serialNumber}/{topicName}`
@@ -71,7 +73,9 @@ Registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfi
 ### Proxy Mode (`proxy/`, 12 files)
 - **User implements**: `Vda5050ProxyVehicleAdapter` (onNavigate, onActionExecute returning CompletableFuture, onPause/onResume/onOrderCancel) and `Vda5050ProxyStateProvider` (getVehicleStatus, getFactsheet). Optionally implement `ActionHandler` for custom action types.
 - `ProxyOrderStateMachine`: receives Order/InstantActions, manages IDLE→RUNNING↔PAUSED transitions, handles built-in actions (cancelOrder, startPause, stopPause, factsheetRequest)
-- `ProxyOrderExecutor`: `@Scheduled(fixedDelay=200ms)` loop iterating proxy vehicles, processing nodes with BlockingType dispatch (HARD=exclusive, SOFT=no driving, NONE=parallel). Enforces navigation timeout (`navigationTimeoutMs`) and action timeout (`actionTimeoutMs`). Starts edge actions when traversing edges. Graceful shutdown via `shutdown()` + `isIdle()`.
+- `ProxyOrderExecutor`: `@Scheduled(fixedDelay=200ms)` main loop iterating proxy vehicles. Delegates to `ProxyNodeActionDispatcher` (action scheduling by BlockingType, timeout detection) and `ProxyNavigationController` (node advancement, async navigation). Adapter callbacks (`onNavigationCancel`, `onActionCancel`) and events execute after lock release.
+- `ProxyNodeActionDispatcher`: action dispatch by BlockingType (HARD=exclusive, SOFT=no driving, NONE=parallel), timeout detection via `actionTimeoutMs`, `timedOutActionIds` Set-based guard prevents async callback overwrite.
+- `ProxyNavigationController`: node advancement, waypoint/edge collection, async `onNavigate` with `tryLock(5s)` callback, `cancelledOrderIds` guard, navigation timeout via `navigationTimeoutMs`.
 - `ProxyHeartbeatScheduler`: `@Scheduled` publishes AgvState per vehicle, merging FMS status from StateProvider
 - `ProxyConnectionPublisher`: publishes ONLINE at `@PostConstruct`, OFFLINE at `@PreDestroy` with graceful drain
 - `OrderValidator`: validates incoming orders (orderId, node/edge sequence consistency, orderUpdateId monotonicity)
@@ -79,7 +83,8 @@ Registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfi
 ### Server Mode (`server/`, 9 files)
 - **User implements**: `Vda5050ServerAdapter` (onStateUpdate required; onNodeReached, onOrderCompleted, onOrderFailed, etc. optional defaults)
 - **User calls**: `OrderDispatcher.sendOrder()`, `InstantActionSender.send()` / `.cancelOrder()` / `.pauseVehicle()` etc.
-- `AgvStateTracker`: detects node reached (lastNodeId change), action state changes, order completion (nodeStates empty + !driving + all actions terminal), error changes
+- `AgvStateTracker`: detects node reached (lastNodeId change), action state changes, order completion (nodeStates empty + !driving + all actions terminal), error changes. Uses `completedOrderIds` Set to prevent duplicate completion callbacks.
+- `OrderDispatcher`: FATAL pre-check reads `lastReceivedState` errors (not proxy agvState) under `lockServer()`. Clears `completedOrderId` on new order send.
 - `OrderProgressTracker`: query current progress (completed nodes/actions, completion percent)
 - `ServerConnectionMonitor`: `@Scheduled` timeout detection, processes Connection messages
 
@@ -87,9 +92,12 @@ Registered via `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfi
 8 Spring `ApplicationEvent` types: `OrderReceivedEvent`, `OrderCompletedEvent`, `OrderFailedEvent`, `NodeReachedEvent`, `ConnectionStateChangedEvent`, `ErrorOccurredEvent`, `VehicleTimeoutEvent`. Base class `Vda5050Event` with vehicleId.
 
 ### Thread Safety (`vehicle/`, 2 files)
-- `VehicleContext`: per-vehicle state container with `ReentrantLock`. Holds proxy state (agvState, currentOrder, clientState, nodeIndex, proxyMqttClient, navigationStartTime, actionStartTimes) and server state (lastReceivedState, lastSentOrder, connectionState). AtomicInteger header ID generators.
+- `VehicleContext`: per-vehicle state container with **dual `ReentrantLock`**:
+  - `stateLock` (`lock()`/`unlock()`/`tryLock()`): protects proxy state — agvState, currentOrder, clientState, nodeIndex, proxyMqttClient, navigationStartTime, actionStartTimes, timedOutActionIds, cancelledOrderIds
+  - `serverStateLock` (`lockServer()`/`unlockServer()`/`tryLockServer()`): protects server state — lastReceivedState, lastSentOrder, connectionState, lastSeenTimestamp, completedOrderIds
+  - `reconnectAttempts`: AtomicInteger, lock-free
 - `VehicleRegistry`: `ConcurrentHashMap<String, VehicleContext>`, key format `"{manufacturer}:{serialNumber}"`. Initialized from config at `@PostConstruct`. Supports runtime `registerVehicle()`/`unregisterVehicle()` (callers must also coordinate MQTT via `MqttConnectionManager`).
-- Lock rule: acquire per-vehicle lock for state mutations; release before I/O (MQTT publish), Spring event publishing (`publishEvent()`), and adapter callbacks. Pattern: collect events/callbacks inside lock, execute after unlock.
+- Lock rule: acquire per-vehicle lock for state mutations; release before I/O (MQTT publish), Spring event publishing (`publishEvent()`), adapter callbacks, and user-provided stateProvider callbacks. Pattern: collect events/callbacks inside lock, execute after unlock. `ProxyOrderStateMachine` uses `DeferredCallback` enum + `InstantActionResult` record to defer adapter calls. Async callbacks in `ProxyNodeActionDispatcher`/`ProxyNavigationController` use `tryLock(5s)` to re-acquire lock.
 
 ## Key Design Decisions
 

@@ -2,27 +2,34 @@
 
 [![CI](https://github.com/chaihaoEx/vda5050-spring-boot-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/chaihaoEx/vda5050-spring-boot-starter/actions/workflows/ci.yml)
 
-一个为 Java/Spring Boot 生态设计的 VDA5050 协议工具库，提供 **Proxy（代理）** 和 **Server（服务端）** 两种运行模式，帮助开发者快速对接 VDA5050 协议的自动导引车辆（AGV）调度系统。
+A Spring Boot Starter for the [VDA5050](https://github.com/VDA5050/VDA5050) AGV communication protocol. Drop in the dependency, implement a few callback interfaces, and your Spring Boot application speaks VDA5050 over MQTT — no protocol plumbing required.
 
-## 背景
+## Features
 
-[VDA5050](https://github.com/VDA5050/VDA5050) 是由德国汽车工业协会（VDA）和德国机械设备制造业联合会（VDMA）联合制定的 AGV 通信接口标准，旨在统一不同厂商 AGV 与调度系统之间的通信协议。协议基于 MQTT，定义了订单下发、状态上报、即时动作等完整的交互流程。
+- **Proxy mode** — Bridge between an external VDA5050 dispatcher and your existing fleet
+- **Server mode** — Act as a VDA5050-compliant master control for standard AGVs
+- **Both modes** can run independently or simultaneously in the same application
+- Full VDA5050 v2 message model (28 POJOs + 7 enums)
+- Per-vehicle dedicated MQTT clients with LWT-based disconnect detection
+- Order state machine with BlockingType action dispatch (HARD / SOFT / NONE)
+- Thread-safe dual-lock architecture (proxy lock + server lock per vehicle)
+- Spring Boot Actuator health indicator with per-vehicle connection status
+- SSL/TLS support with configurable keystore/truststore
+- 242 tests (unit + integration with embedded MQTT broker)
 
-本项目的目标是让 Spring Boot 开发者**无需深入了解 VDA5050 协议细节**，通过引入一个 Starter 依赖 + 实现业务回调接口，即可完成 VDA5050 协议的对接。
+## Quick Start
 
-## 快速开始
-
-### 1. 添加依赖
+### 1. Add Dependency
 
 ```xml
 <dependency>
     <groupId>com.navasmart</groupId>
     <artifactId>vda5050-spring-boot-starter</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
 </dependency>
 ```
 
-### 2. 配置 MQTT 和车辆
+### 2. Configure
 
 ```yaml
 vda5050:
@@ -41,9 +48,9 @@ vda5050:
         serialNumber: agv01
 ```
 
-### 3. 实现回调接口
+### 3. Implement Callbacks
 
-**Proxy 模式** — 实现两个接口，接收 VDA5050 指令并控制你的车辆：
+**Proxy mode** — receive VDA5050 orders and control your vehicles:
 
 ```java
 @Component
@@ -51,46 +58,57 @@ public class MyVehicleAdapter implements Vda5050ProxyVehicleAdapter {
     @Override
     public CompletableFuture<NavigationResult> onNavigate(
             String vehicleId, Node targetNode, List<Node> waypoints, List<Edge> edges) {
-        // 控制你的车辆导航到目标节点
+        // Navigate your vehicle to the target node
         return CompletableFuture.completedFuture(NavigationResult.success());
     }
 
     @Override
     public CompletableFuture<ActionResult> onActionExecute(String vehicleId, Action action) {
-        // 执行动作（如 pick、drop、charge 等）
+        // Execute action (pick, drop, charge, etc.)
         return CompletableFuture.completedFuture(ActionResult.success());
     }
 
-    // ... 其他回调方法（onPause, onResume, onOrderCancel 等）
+    @Override public void onPause(String vehicleId) { /* pause vehicle */ }
+    @Override public void onResume(String vehicleId) { /* resume vehicle */ }
+    @Override public void onOrderCancel(String vehicleId) { /* cancel current order */ }
+    @Override public void onNavigationCancel(String vehicleId) { /* abort navigation */ }
+    @Override public void onActionCancel(String vehicleId, String actionId) { /* cancel action */ }
 }
 
 @Component
 public class MyStateProvider implements Vda5050ProxyStateProvider {
     @Override
     public VehicleStatus getVehicleStatus(String vehicleId) {
-        // 返回车辆当前状态（位置、电池、速度等）
+        // Return current vehicle state (position, battery, speed, etc.)
+        return new VehicleStatus();
     }
 
     @Override
     public Factsheet getFactsheet(String vehicleId) {
-        // 返回车辆能力描述
+        // Return vehicle capability description
+        return new Factsheet();
     }
 }
 ```
 
-**Server 模式** — 实现一个接口接收 AGV 状态，注入 API 下发指令：
+**Server mode** — dispatch orders and track AGV state:
 
 ```java
 @Component
 public class MyServerAdapter implements Vda5050ServerAdapter {
     @Override
     public void onStateUpdate(String vehicleId, AgvState state) {
-        // 处理 AGV 状态更新
+        // Process AGV state updates
     }
 
     @Override
     public void onOrderCompleted(String vehicleId, String orderId) {
-        // 订单执行完成
+        // Order execution completed
+    }
+
+    @Override
+    public void onOrderFailed(String vehicleId, String orderId, List<Error> errors) {
+        // Order execution failed
     }
 }
 
@@ -99,103 +117,139 @@ public class MyDispatchService {
     @Autowired private OrderDispatcher orderDispatcher;
     @Autowired private InstantActionSender actionSender;
 
-    public void dispatchOrder() {
+    public void dispatch() {
         Order order = OrderBuilder.create("order-001")
             .addNode("node-1", 0.0, 0.0, 0.0, "map-1", true)
             .withAction("action-1", "pick", "HARD", Map.of("station", "S1"))
             .addEdge("edge-1", "node-1", "node-2", 1.5, true)
             .addNode("node-2", 10.0, 0.0, 0.0, "map-1", true)
             .build();
-        orderDispatcher.sendOrder("ThirdParty:agv01", order);
+
+        SendResult result = orderDispatcher.sendOrder("ThirdParty:agv01", order);
+        // result.isSuccess() / result.getFailureReason()
+    }
+
+    public void cancelOrder(String vehicleId) {
+        actionSender.cancelOrder(vehicleId);
     }
 }
 ```
 
-## 两种模式
-
-### Proxy 模式（AGV 侧代理）
-
-你的系统已有自己的车队和控制协议，但需要接入外部的 VDA5050 调度系统。Proxy 模式作为中间层：
+## Architecture
 
 ```
-外部 VDA5050 调度系统 ──MQTT──▶ [Proxy 模式] ──回调──▶ 你的 FMS ──自有协议──▶ 你的车辆
+                    Proxy Mode                                Server Mode
+          ┌─────────────────────────┐              ┌─────────────────────────┐
+          │  External VDA5050       │              │  Your Dispatch System   │
+          │  Dispatcher             │              │                         │
+          └──────────┬──────────────┘              └──────────┬──────────────┘
+                     │ MQTT                         API calls │
+                     ▼                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  VDA5050 Spring Boot Starter                                                │
+│                                                                             │
+│  ┌─────────────────────────┐        ┌───────────────────────────────────┐  │
+│  │ ProxyOrderStateMachine  │        │ OrderDispatcher                   │  │
+│  │ ProxyOrderExecutor      │        │ InstantActionSender               │  │
+│  │  ├ NodeActionDispatcher │        │ AgvStateTracker                   │  │
+│  │  └ NavigationController │        │ OrderProgressTracker              │  │
+│  │ ProxyHeartbeatScheduler │        │ ServerConnectionMonitor           │  │
+│  └─────────────────────────┘        └───────────────────────────────────┘  │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ MQTT Layer: MqttGateway · MqttConnectionManager · MqttInboundRouter│    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ VehicleRegistry · VehicleContext (dual ReentrantLock per vehicle)   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                     │ MQTT                                   │ MQTT
+                     ▼                                        ▼
+          ┌─────────────────────────┐              ┌─────────────────────────┐
+          │  Your Vehicles          │              │  VDA5050 AGVs           │
+          │  (via callback)         │              │  (standard protocol)    │
+          └─────────────────────────┘              └─────────────────────────┘
 ```
 
-- 接收 VDA5050 Order / InstantActions
-- 通过回调接口通知你的业务系统
-- 自动管理订单状态机（IDLE → RUNNING ↔ PAUSED）、动作调度、心跳上报
+## Configuration
 
-### Server 模式（Master Control）
+| Property | Default | Description |
+|----------|---------|-------------|
+| `vda5050.mqtt.host` | `localhost` | MQTT broker address |
+| `vda5050.mqtt.port` | `1883` | MQTT broker port |
+| `vda5050.mqtt.transport` | `tcp` | Transport protocol (`tcp` / `websocket`) |
+| `vda5050.mqtt.interfaceName` | `uagv` | VDA5050 topic interface name |
+| `vda5050.mqtt.majorVersion` | `v2` | VDA5050 topic version |
+| `vda5050.mqtt.ssl.enabled` | `false` | Enable SSL/TLS |
+| `vda5050.mqtt.maxReconnectAttempts` | `0` | Max reconnect attempts (0 = unlimited) |
+| `vda5050.proxy.enabled` | `false` | Enable Proxy mode |
+| `vda5050.proxy.heartbeatIntervalMs` | `1000` | State heartbeat interval (ms) |
+| `vda5050.proxy.orderLoopIntervalMs` | `200` | Order execution loop interval (ms) |
+| `vda5050.proxy.navigationTimeoutMs` | `0` | Navigation timeout (0 = disabled) |
+| `vda5050.proxy.actionTimeoutMs` | `0` | Action timeout (0 = disabled) |
+| `vda5050.server.enabled` | `false` | Enable Server mode |
+| `vda5050.server.stateTimeoutMs` | `60000` | AGV state timeout threshold (ms) |
 
-你的系统需要作为调度方，控制符合 VDA5050 标准的 AGV：
+See [Configuration Guide](docs/10-configuration-guide.md) for full reference.
 
-```
-你的调度系统 ──调用 API──▶ [Server 模式] ──MQTT──▶ VDA5050 AGV
-```
+## Spring Events
 
-- 提供 `OrderDispatcher`、`InstantActionSender` 等 API 下发指令
-- 自动追踪 AGV 状态、检测订单完成/失败
-- 通过事件回调通知你的调度逻辑
+Subscribe to VDA5050 lifecycle events via `@EventListener`:
 
-两种模式可独立启用，也可同时运行。
+| Event | Description |
+|-------|-------------|
+| `OrderReceivedEvent` | New order received (proxy mode) |
+| `OrderCompletedEvent` | Order execution completed |
+| `OrderFailedEvent` | Order execution failed |
+| `NodeReachedEvent` | Vehicle reached a node |
+| `ConnectionStateChangedEvent` | Vehicle connection state changed |
+| `ErrorOccurredEvent` | Vehicle reported an error |
+| `VehicleTimeoutEvent` | Vehicle state message timeout |
 
-## 技术栈
+## Actuator Health
 
-- Java 17+
-- Spring Boot 4.0.5
-- Eclipse Paho MQTT v3 (1.2.5)
-- Jackson
+With Spring Boot Actuator on the classpath, the `/actuator/health` endpoint includes MQTT connection status per vehicle, with reconnect attempt counters.
 
-## 构建与测试
+## Build & Test
 
 ```bash
-./mvnw clean compile       # 编译
-./mvnw verify              # 编译 + 测试 + SpotBugs + Checkstyle + JaCoCo
-./mvnw test -Dtest=ProxyOrderFlowTest  # 运行单个测试类
+./mvnw clean compile                         # Compile
+./mvnw verify                                # Compile + test + SpotBugs + Checkstyle + JaCoCo
+./mvnw test -Dtest=ProxyOrderFlowTest        # Run a single test class
 ```
 
-项目包含 97 个测试（单元测试 + 集成测试），集成测试使用 Moquette 嵌入式 MQTT Broker，无需外部依赖。
+242 tests (unit + integration). Integration tests use an embedded MQTT broker (Moquette) — no external dependencies needed.
 
-## 配置参考
+## Tech Stack
 
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `vda5050.mqtt.host` | `localhost` | MQTT Broker 地址 |
-| `vda5050.mqtt.port` | `1883` | MQTT Broker 端口 |
-| `vda5050.mqtt.transport` | `tcp` | 传输协议（`tcp` / `websocket`） |
-| `vda5050.mqtt.interfaceName` | `uagv` | VDA5050 Topic 接口名 |
-| `vda5050.mqtt.majorVersion` | `v2` | VDA5050 Topic 版本号 |
-| `vda5050.proxy.enabled` | `false` | 启用 Proxy 模式 |
-| `vda5050.proxy.heartbeatIntervalMs` | `1000` | 状态心跳间隔（毫秒） |
-| `vda5050.proxy.orderLoopIntervalMs` | `200` | 订单执行循环间隔（毫秒） |
-| `vda5050.server.enabled` | `false` | 启用 Server 模式 |
-| `vda5050.server.stateTimeoutMs` | `60000` | AGV 状态超时阈值（毫秒） |
+- Java 17, Spring Boot 4.0.5
+- Eclipse Paho MQTT v3 (1.2.5), Jackson 3.x
+- Maven build, packaged as a library
+- SpotBugs + Checkstyle enforced in CI
 
-完整配置请参考 [10 配置指南](docs/10-configuration-guide.md)。
+## Documentation
 
-## 文档
+| Doc | Description |
+|-----|-------------|
+| [Architecture Overview](docs/01-architecture-overview.md) | Dual-mode architecture, module structure, data flow |
+| [Data Model Reference](docs/02-data-model-reference.md) | 28 VDA5050 message types |
+| [MQTT Communication](docs/03-mqtt-communication.md) | Topic structure, publish/subscribe, connection management |
+| [Proxy Callback Interface](docs/04-proxy-callback-interface.md) | Interfaces your FMS implements |
+| [Proxy Order State Machine](docs/05-proxy-order-state-machine.md) | Order execution engine |
+| [Proxy Action Handler](docs/06-proxy-action-handler.md) | BlockingType dispatch and custom action handlers |
+| [Server Interface Design](docs/07-server-interface-design.md) | Dispatch system interfaces and API |
+| [Server Order Dispatch](docs/08-server-order-dispatch.md) | State tracking, progress query |
+| [Multi-Vehicle Management](docs/09-multi-vehicle-management.md) | VehicleContext, thread safety, dual-lock design |
+| [Configuration Guide](docs/10-configuration-guide.md) | Full YAML reference |
+| [Error Handling](docs/11-error-handling.md) | Error classification and aggregation |
+| [Integration Guide](docs/12-integration-guide.md) | Hands-on examples for both modes |
+| [Proxy Quick Start](docs/13-proxy-quick-start.md) | 10-minute Proxy mode setup |
+| [Security Guide](docs/15-security-guide.md) | SSL/TLS configuration |
 
-| 文档 | 说明 |
-|------|------|
-| [01 架构总览](docs/01-architecture-overview.md) | 双模式架构、模块结构、数据流 |
-| [02 数据模型参考](docs/02-data-model-reference.md) | 27 个 VDA5050 消息类型定义 |
-| [03 MQTT 通信层](docs/03-mqtt-communication.md) | Topic 结构、收发、连接管理 |
-| [04 Proxy 回调接口](docs/04-proxy-callback-interface.md) | FMS 需实现的接口 |
-| [05 Proxy 订单状态机](docs/05-proxy-order-state-machine.md) | 订单执行引擎 |
-| [06 Proxy 动作处理器](docs/06-proxy-action-handler.md) | Blocking Type 调度 |
-| [07 Server 接口设计](docs/07-server-interface-design.md) | 调度系统接口与 API |
-| [08 Server 订单下发](docs/08-server-order-dispatch.md) | 状态追踪、进度查询 |
-| [09 多车辆管理](docs/09-multi-vehicle-management.md) | VehicleContext、线程安全 |
-| [10 配置指南](docs/10-configuration-guide.md) | 完整 YAML 参考 |
-| [11 错误处理](docs/11-error-handling.md) | 错误分类与聚合 |
-| [12 集成指南](docs/12-integration-guide.md) | 两种模式的实操示例 |
-| [13 Proxy 快速集成](docs/13-proxy-quick-start.md) | 10 分钟完成 Proxy 模式集成 |
+## References
 
-## 参考项目
-
-- **[NVIDIA-ISAAC-ROS/isaac_ros_cloud_control](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_cloud_control)** — NVIDIA Isaac ROS 的 VDA5050 客户端实现（C++ / Python / ROS 2）。本项目的数据模型、订单状态机、动作调度逻辑和 MQTT 通信层设计均参考了该项目的实现。
-
-- **[VDA5050/VDA5050](https://github.com/VDA5050/VDA5050)** — VDA5050 协议官方规范文档，定义了所有消息类型、Topic 结构和交互流程。
+- [VDA5050/VDA5050](https://github.com/VDA5050/VDA5050) — Official VDA5050 protocol specification
+- [NVIDIA Isaac ROS Cloud Control](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_cloud_control) — Reference VDA5050 client implementation (C++ / Python / ROS 2). This project's data model, order state machine, action dispatch logic and MQTT communication design were informed by this implementation.
 
 ## License
 
