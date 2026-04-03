@@ -1,6 +1,7 @@
 package com.navasmart.vda5050.server.dispatch;
 
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
+import com.navasmart.vda5050.error.ErrorAggregator;
 import com.navasmart.vda5050.model.Order;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.server.callback.SendResult;
@@ -30,12 +31,14 @@ public class OrderDispatcher {
     private final VehicleRegistry vehicleRegistry;
     private final MqttGateway mqttGateway;
     private final Vda5050Properties properties;
+    private final ErrorAggregator errorAggregator;
 
     public OrderDispatcher(VehicleRegistry vehicleRegistry, MqttGateway mqttGateway,
-                           Vda5050Properties properties) {
+                           Vda5050Properties properties, ErrorAggregator errorAggregator) {
         this.vehicleRegistry = vehicleRegistry;
         this.mqttGateway = mqttGateway;
         this.properties = properties;
+        this.errorAggregator = errorAggregator;
     }
 
     /**
@@ -54,6 +57,15 @@ public class OrderDispatcher {
             return SendResult.failure("Vehicle not registered: " + vehicleId);
         }
 
+        ctx.lock();
+        try {
+            if (errorAggregator.hasFatalError(ctx)) {
+                return SendResult.failure("Vehicle " + vehicleId + " has FATAL error, refusing to send order");
+            }
+        } finally {
+            ctx.unlock();
+        }
+
         ctx.lockServer();
         try {
             order.setHeaderId(ctx.nextOrderHeaderId());
@@ -63,6 +75,7 @@ public class OrderDispatcher {
             order.setSerialNumber(ctx.getSerialNumber());
 
             ctx.setLastSentOrder(order);
+            ctx.removeCompletedOrderId(order.getOrderId());
         } finally {
             ctx.unlockServer();
         }

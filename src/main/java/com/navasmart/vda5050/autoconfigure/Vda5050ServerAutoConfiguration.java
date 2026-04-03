@@ -1,5 +1,6 @@
 package com.navasmart.vda5050.autoconfigure;
 
+import com.navasmart.vda5050.error.ErrorAggregator;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.mqtt.MqttInboundRouter;
 import com.navasmart.vda5050.server.callback.Vda5050ServerAdapter;
@@ -41,8 +42,9 @@ public class Vda5050ServerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public OrderDispatcher orderDispatcher(VehicleRegistry vehicleRegistry, MqttGateway mqttGateway,
-                                            Vda5050Properties properties) {
-        return new OrderDispatcher(vehicleRegistry, mqttGateway, properties);
+                                            Vda5050Properties properties,
+                                            ErrorAggregator errorAggregator) {
+        return new OrderDispatcher(vehicleRegistry, mqttGateway, properties, errorAggregator);
     }
 
     /**
