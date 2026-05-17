@@ -17,9 +17,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.*;
 
 /**
  * 测试 {@link VehicleRegistry} 初始化与 {@link VehicleRegistryListener} 对外部
@@ -48,8 +46,10 @@ class DynamicVehicleRegistrationTest {
                 new VehicleRegistryEvent(this, manufacturer, serialNumber, proxyMode, serverMode));
     }
 
-    private void publishUnregistered(String manufacturer, String serialNumber) throws MqttException {
-        listener.onVehicleUnRegistry(new VehicleUnRegistryEvent(this, manufacturer, serialNumber));
+    private void publishUnregistered(String manufacturer, String serialNumber,
+                                     boolean proxyMode, boolean serverMode) throws MqttException {
+        listener.onVehicleUnRegistry(
+                new VehicleUnRegistryEvent(this, manufacturer, serialNumber, proxyMode, serverMode));
     }
 
     @Test
@@ -173,7 +173,7 @@ class DynamicVehicleRegistrationTest {
         publishRegistered("Mfg", "bot01", true, false);
         VehicleContext ctx = registry.get("Mfg", "bot01");
 
-        publishUnregistered("Mfg", "bot01");
+        publishUnregistered("Mfg", "bot01", true, false);
 
         assertThat(ctx.getVehicleId()).isEqualTo("Mfg:bot01");
         assertThat(registry.getAll()).isEmpty();
@@ -189,7 +189,7 @@ class DynamicVehicleRegistrationTest {
         publishRegistered("Mfg", "bot02", false, true);
         VehicleContext ctx = registry.get("Mfg", "bot02");
 
-        publishUnregistered("Mfg", "bot02");
+        publishUnregistered("Mfg", "bot02", false, true);
 
         verify(mqttConnectionManager).unsubscribeServerVehicle(same(ctx));
         verify(mqttConnectionManager, never()).disconnectProxyVehicle(any());
@@ -200,7 +200,7 @@ class DynamicVehicleRegistrationTest {
         properties.getProxy().setEnabled(true);
         properties.getServer().setEnabled(true);
 
-        publishUnregistered("NoSuch", "vehicle");
+        publishUnregistered("NoSuch", "vehicle", true, true);
 
         verifyNoInteractions(mqttConnectionManager);
     }

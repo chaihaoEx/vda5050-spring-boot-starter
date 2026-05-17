@@ -9,14 +9,18 @@ public class VehicleUnRegistryEvent extends ApplicationEvent {
 
     private final String manufacturer;
     private final String serialNumber;
+    private final boolean proxyMode;
+    private final boolean serverMode;
 
 
-    public VehicleUnRegistryEvent(Object source, String manufacturer, String serialNumber) {
+    public VehicleUnRegistryEvent(Object source, String manufacturer, String serialNumber, boolean proxyMode, boolean serverMode) {
         super(source);
 
         this.manufacturer = manufacturer;
         this.serialNumber = serialNumber;
 
+        this.proxyMode = proxyMode;
+        this.serverMode = serverMode;
     }
 
     public String getManufacturer() {
@@ -27,4 +31,11 @@ public class VehicleUnRegistryEvent extends ApplicationEvent {
         return serialNumber;
     }
 
+    public boolean isProxyMode() {
+        return proxyMode;
+    }
+
+    public boolean isServerMode() {
+        return serverMode;
+    }
 }
