@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.navasmart.vda5050.error.ErrorAggregator;
 import com.navasmart.vda5050.error.Vda5050ErrorFactory;
+import com.navasmart.vda5050.listener.VehicleRegistryListener;
 import com.navasmart.vda5050.mqtt.MqttConnectionManager;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.mqtt.MqttInboundRouter;
@@ -23,6 +24,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
@@ -33,7 +35,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * <ul>
  *   <li>MQTT 通信层：MqttClient、MqttGateway、MqttInboundRouter、MqttConnectionManager</li>
  *   <li>消息序列化：vda5050ObjectMapper（独立的 ObjectMapper 实例）</li>
- *   <li>车辆管理：VehicleRegistry</li>
+ *   <li>车辆管理：VehicleRegistry、VehicleRegistryListener</li>
  *   <li>错误处理：Vda5050ErrorFactory、ErrorAggregator</li>
  * </ul>
  *
@@ -167,6 +169,7 @@ public class Vda5050AutoConfiguration {
      */
     @Bean
     @ConditionalOnMissingBean
+    @DependsOn("vehicleRegistry")
     public MqttConnectionManager mqttConnectionManager(MqttClient mqttClient,
                                                         MqttInboundRouter inboundRouter,
                                                         MqttTopicResolver topicResolver,
@@ -176,6 +179,18 @@ public class Vda5050AutoConfiguration {
                                                         MqttGateway mqttGateway) {
         return new MqttConnectionManager(mqttClient, inboundRouter, topicResolver,
                 vehicleRegistry, properties, vda5050ObjectMapper, mqttGateway);
+    }
+
+    /**
+     * 监听外部发布的 {@link com.navasmart.vda5050.event.vehicle.VehicleRegistryEvent}，
+     * 同步更新注册表与 MQTT。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public VehicleRegistryListener vehicleRegistryListener(VehicleRegistry vehicleRegistry,
+                                                           MqttConnectionManager mqttConnectionManager,
+                                                           Vda5050Properties properties) {
+        return new VehicleRegistryListener(vehicleRegistry, mqttConnectionManager, properties);
     }
 
     /**

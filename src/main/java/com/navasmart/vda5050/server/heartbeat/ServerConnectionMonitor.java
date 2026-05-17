@@ -1,8 +1,8 @@
 package com.navasmart.vda5050.server.heartbeat;
 
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
-import com.navasmart.vda5050.event.ConnectionStateChangedEvent;
-import com.navasmart.vda5050.event.VehicleTimeoutEvent;
+import com.navasmart.vda5050.event.vda5050.ConnectionStateChangedEvent;
+import com.navasmart.vda5050.event.vda5050.VehicleTimeoutEvent;
 import com.navasmart.vda5050.model.Connection;
 import com.navasmart.vda5050.server.callback.Vda5050ServerAdapter;
 import com.navasmart.vda5050.util.TimestampUtil;

@@ -268,7 +268,7 @@ mosquitto_pub -h your-mqtt-broker.com \
     "version": "2.0.0",
     "manufacturer": "MyCompany",
     "serialNumber": "forklift01",
-    "instantActions": [{
+    "actions": [{
       "actionType": "startPause",
       "actionId": "pause-001",
       "blockingType": "NONE"

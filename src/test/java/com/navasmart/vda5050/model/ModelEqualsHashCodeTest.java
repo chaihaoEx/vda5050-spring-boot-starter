@@ -446,7 +446,7 @@ class ModelEqualsHashCodeTest {
 
     @Test
     void error_reflexive() {
-        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        Error a = new Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
         a.setErrorLevel("WARNING");
@@ -455,11 +455,11 @@ class ModelEqualsHashCodeTest {
 
     @Test
     void error_symmetric() {
-        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        Error a = new Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
         a.setErrorLevel("WARNING");
-        com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
+        Error b = new Error();
         b.setErrorType("ET");
         b.setErrorDescription("ED");
         b.setErrorLevel("WARNING");
@@ -469,11 +469,11 @@ class ModelEqualsHashCodeTest {
 
     @Test
     void error_different() {
-        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        Error a = new Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
         a.setErrorLevel("WARNING");
-        com.navasmart.vda5050.model.Error c = new com.navasmart.vda5050.model.Error();
+        Error c = new Error();
         c.setErrorType("ET2");
         c.setErrorDescription("ED2");
         c.setErrorLevel("FATAL");
@@ -482,11 +482,11 @@ class ModelEqualsHashCodeTest {
 
     @Test
     void error_sameTypeAndDesc_differentLevel() {
-        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        Error a = new Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
         a.setErrorLevel("WARNING");
-        com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
+        Error b = new Error();
         b.setErrorType("ET");
         b.setErrorDescription("ED");
         b.setErrorLevel("FATAL");
@@ -495,11 +495,11 @@ class ModelEqualsHashCodeTest {
 
     @Test
     void error_sameTypeAndLevel_differentDesc() {
-        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        Error a = new Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED1");
         a.setErrorLevel("WARNING");
-        com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
+        Error b = new Error();
         b.setErrorType("ET");
         b.setErrorDescription("ED2");
         b.setErrorLevel("WARNING");
@@ -508,11 +508,11 @@ class ModelEqualsHashCodeTest {
 
     @Test
     void error_hashCodeConsistency() {
-        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        Error a = new Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
         a.setErrorLevel("WARNING");
-        com.navasmart.vda5050.model.Error b = new com.navasmart.vda5050.model.Error();
+        Error b = new Error();
         b.setErrorType("ET");
         b.setErrorDescription("ED");
         b.setErrorLevel("WARNING");
@@ -521,7 +521,7 @@ class ModelEqualsHashCodeTest {
 
     @Test
     void error_nullSafety() {
-        com.navasmart.vda5050.model.Error a = new com.navasmart.vda5050.model.Error();
+        Error a = new Error();
         a.setErrorType("ET");
         a.setErrorDescription("ED");
         a.setErrorLevel("WARNING");

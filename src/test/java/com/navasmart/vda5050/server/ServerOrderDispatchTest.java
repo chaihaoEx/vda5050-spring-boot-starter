@@ -181,7 +181,7 @@ class ServerOrderDispatchTest {
         assertTrue(arrived, "Should receive 3 instant action messages");
 
         List<String> actionTypes = receivedActions.stream()
-                .flatMap(ia -> ia.getInstantActions().stream())
+                .flatMap(ia -> ia.getActions().stream())
                 .map(Action::getActionType)
                 .toList();
 

@@ -72,7 +72,7 @@
 | version | String | 是 | 协议版本 |
 | manufacturer | String | 是 | 制造商 |
 | serialNumber | String | 是 | 序列号 |
-| instantActions | List\<Action\> | 是 | 即时动作列表 |
+| actions | List\<Action\> | 是 | 即时动作列表（JSON 键名 `actions`，VDA5050 §7.4） |
 
 ### 1.4 Connection — 连接状态
 

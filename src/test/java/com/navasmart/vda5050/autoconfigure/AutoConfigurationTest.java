@@ -9,6 +9,7 @@ import com.navasmart.vda5050.mqtt.MqttConnectionManager;
 import com.navasmart.vda5050.mqtt.MqttGateway;
 import com.navasmart.vda5050.mqtt.MqttInboundRouter;
 import com.navasmart.vda5050.mqtt.MqttTopicResolver;
+import com.navasmart.vda5050.listener.VehicleRegistryListener;
 import com.navasmart.vda5050.vehicle.VehicleRegistry;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,7 @@ class AutoConfigurationTest {
     void vehicleRegistryBeanExists() {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(VehicleRegistry.class);
+            assertThat(context).hasSingleBean(VehicleRegistryListener.class);
         });
     }
 

@@ -13,7 +13,7 @@ import java.util.Optional;
 /**
  * 动作处理器注册中心，负责管理 actionType 到 {@link ActionHandler} 的映射关系。
  *
- * <p>在 Spring 容器启动时，通过 {@link org.springframework.beans.factory.annotation.Autowired}
+ * <p>在 Spring 容器启动时，通过 {@link Autowired}
  * 自动注入所有实现了 {@link ActionHandler} 接口的 Spring Bean，并根据各处理器声明的
  * {@link ActionHandler#getSupportedActionTypes()} 建立 actionType -> Handler 的映射。</p>
  *

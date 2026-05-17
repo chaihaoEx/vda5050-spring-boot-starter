@@ -61,7 +61,9 @@ public class MqttConnectionManager {
     private final ObjectMapper objectMapper;
     private final MqttGateway mqttGateway;
 
-    /** 共享 client 的连续断连计数器（成功重连后重置为 0） */
+    /**
+     * 共享 client 的连续断连计数器（成功重连后重置为 0）
+     */
     private final AtomicInteger consecutiveDisconnects = new AtomicInteger(0);
 
     public MqttConnectionManager(MqttClient mqttClient, MqttInboundRouter inboundRouter,
@@ -151,7 +153,20 @@ public class MqttConnectionManager {
      * @throws MqttException 连接失败时抛出
      */
     public void connectProxyVehicle(VehicleContext ctx) throws MqttException {
+        if (ctx == null) {
+            log.error("Cannot connect to proxy null vehicle");
+            return;
+        }
+        if (!properties.getProxy().isEnabled()) {
+            log.warn("Proxy mode are disabled, vehicleId = {}", ctx.getVehicleId());
+            return;
+        }
+        if (ctx.getProxyMqttClient() != null) {
+            log.info("Proxy MQTT client already allocated for vehicle {}, skipping connect", ctx.getVehicleId());
+            return;
+        }
         connectSingleProxyVehicle(ctx);
+
     }
 
     private void connectSingleProxyVehicle(VehicleContext ctx) throws MqttException {
@@ -194,6 +209,14 @@ public class MqttConnectionManager {
      * @param ctx 车辆上下文
      */
     public void disconnectProxyVehicle(VehicleContext ctx) {
+        if (ctx == null) {
+            log.error("Cannot disconnect from null ctx");
+            return;
+        }
+        if (!properties.getProxy().isEnabled()) {
+            log.warn("Proxy mode are disabled , vehicleId = {}", ctx.getVehicleId());
+            return;
+        }
         MqttClient vehicleClient = ctx.getProxyMqttClient();
         if (vehicleClient != null) {
             try {
@@ -215,6 +238,14 @@ public class MqttConnectionManager {
      * @throws MqttException 订阅失败时抛出
      */
     public void subscribeServerVehicle(VehicleContext ctx) throws MqttException {
+        if (ctx == null) {
+            log.error("Cannot subscribe to null ctx");
+            return;
+        }
+        if (!properties.getServer().isEnabled()) {
+            log.warn("Server mode are disabled , vehicleId = {}", ctx.getVehicleId());
+            return;
+        }
         String stateTopic = topicResolver.stateTopic(ctx.getManufacturer(), ctx.getSerialNumber());
         String connTopic = topicResolver.connectionTopic(ctx.getManufacturer(), ctx.getSerialNumber());
         String fsTopic = topicResolver.factsheetTopic(ctx.getManufacturer(), ctx.getSerialNumber());
@@ -222,6 +253,7 @@ public class MqttConnectionManager {
         sharedMqttClient.subscribe(connTopic, 1);
         sharedMqttClient.subscribe(fsTopic, 0);
         log.info("Server subscribed for vehicle {}: {}, {}, {}", ctx.getVehicleId(), stateTopic, connTopic, fsTopic);
+
     }
 
     /**
@@ -231,6 +263,14 @@ public class MqttConnectionManager {
      * @throws MqttException 取消订阅失败时抛出
      */
     public void unsubscribeServerVehicle(VehicleContext ctx) throws MqttException {
+        if (ctx == null) {
+            log.error("Cannot unsubscribe from null ctx");
+            return;
+        }
+        if (!properties.getServer().isEnabled()) {
+            log.warn("Server mode are disabled ,vehicleId = {}", ctx.getVehicleId());
+            return;
+        }
         String stateTopic = topicResolver.stateTopic(ctx.getManufacturer(), ctx.getSerialNumber());
         String connTopic = topicResolver.connectionTopic(ctx.getManufacturer(), ctx.getSerialNumber());
         String fsTopic = topicResolver.factsheetTopic(ctx.getManufacturer(), ctx.getSerialNumber());

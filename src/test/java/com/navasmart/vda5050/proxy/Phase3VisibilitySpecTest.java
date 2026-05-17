@@ -119,15 +119,15 @@ class Phase3VisibilitySpecTest {
 
         sender.cancelOrder("TestCo:AGV001");
 
-        ArgumentCaptor<com.navasmart.vda5050.model.InstantActions> captor =
-                ArgumentCaptor.forClass(com.navasmart.vda5050.model.InstantActions.class);
+        ArgumentCaptor<InstantActions> captor =
+                ArgumentCaptor.forClass(InstantActions.class);
         verify(mqttGateway).publishInstantActions(eq("TestCo"), eq("AGV001"), captor.capture());
 
-        com.navasmart.vda5050.model.InstantActions sent = captor.getValue();
-        assertThat(sent.getInstantActions()).hasSize(1);
-        assertThat(sent.getInstantActions().get(0).getBlockingType())
+        InstantActions sent = captor.getValue();
+        assertThat(sent.getActions()).hasSize(1);
+        assertThat(sent.getActions().get(0).getBlockingType())
                 .isEqualTo(BlockingType.HARD.getValue());
-        assertThat(sent.getInstantActions().get(0).getActionType())
+        assertThat(sent.getActions().get(0).getActionType())
                 .isEqualTo("cancelOrder");
     }
 
@@ -141,11 +141,11 @@ class Phase3VisibilitySpecTest {
 
         sender.pauseVehicle("TestCo:AGV001");
 
-        ArgumentCaptor<com.navasmart.vda5050.model.InstantActions> captor =
-                ArgumentCaptor.forClass(com.navasmart.vda5050.model.InstantActions.class);
+        ArgumentCaptor<InstantActions> captor =
+                ArgumentCaptor.forClass(InstantActions.class);
         verify(mqttGateway).publishInstantActions(eq("TestCo"), eq("AGV001"), captor.capture());
 
-        assertThat(captor.getValue().getInstantActions().get(0).getBlockingType())
+        assertThat(captor.getValue().getActions().get(0).getBlockingType())
                 .isEqualTo(BlockingType.NONE.getValue());
     }
 
@@ -172,7 +172,7 @@ class Phase3VisibilitySpecTest {
         cancelAction.setActionId("cancel-1");
         cancelAction.setActionType("cancelOrder");
         cancelAction.setBlockingType(BlockingType.HARD.getValue());
-        cancelMsg.setInstantActions(List.of(cancelAction));
+        cancelMsg.setActions(List.of(cancelAction));
 
         stateMachine.receiveInstantActions(ctx, cancelMsg);
 
@@ -202,7 +202,7 @@ class Phase3VisibilitySpecTest {
         cancelAction.setActionId("cancel-1");
         cancelAction.setActionType("cancelOrder");
         cancelAction.setBlockingType(BlockingType.HARD.getValue());
-        cancelMsg.setInstantActions(List.of(cancelAction));
+        cancelMsg.setActions(List.of(cancelAction));
 
         stateMachine.receiveInstantActions(ctx, cancelMsg);
 
@@ -265,7 +265,7 @@ class Phase3VisibilitySpecTest {
         fsAction.setActionId("fs-1");
         fsAction.setActionType("factsheetRequest");
         fsAction.setBlockingType(BlockingType.NONE.getValue());
-        msg.setInstantActions(List.of(fsAction));
+        msg.setActions(List.of(fsAction));
 
         sm.receiveInstantActions(ctx, msg);
 
@@ -309,7 +309,7 @@ class Phase3VisibilitySpecTest {
         fsAction.setActionId("fs-2");
         fsAction.setActionType("factsheetRequest");
         fsAction.setBlockingType(BlockingType.NONE.getValue());
-        msg.setInstantActions(List.of(fsAction));
+        msg.setActions(List.of(fsAction));
 
         sm.receiveInstantActions(ctx, msg);
 
@@ -325,7 +325,7 @@ class Phase3VisibilitySpecTest {
         fsAction.setActionId("fs-1");
         fsAction.setActionType("factsheetRequest");
         fsAction.setBlockingType(BlockingType.NONE.getValue());
-        msg.setInstantActions(List.of(fsAction));
+        msg.setActions(List.of(fsAction));
 
         stateMachine.receiveInstantActions(ctx, msg);
 
@@ -395,7 +395,7 @@ class Phase3VisibilitySpecTest {
         cancelAction.setActionId("cancel-1");
         cancelAction.setActionType("cancelOrder");
         cancelAction.setBlockingType(BlockingType.HARD.getValue());
-        cancelMsg.setInstantActions(List.of(cancelAction));
+        cancelMsg.setActions(List.of(cancelAction));
 
         sm.receiveInstantActions(ctx, cancelMsg);
 

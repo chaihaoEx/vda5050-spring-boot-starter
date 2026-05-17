@@ -4,7 +4,6 @@ import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,14 +17,16 @@ import java.util.stream.Collectors;
  *
  * <h2>初始化时机</h2>
  * <p>在 Spring 容器启动时通过 {@link PostConstruct} 回调自动从配置中读取 Proxy 和 Server 模式的车辆列表，
- * 并将其注册到表中。后续也可通过 {@link #getOrCreate(String, String)} 动态添加车辆。</p>
+ * 并将其注册到表中。运行时 MQTT 协调由外部发布 {@link com.navasmart.vda5050.event.vehicle.VehicleRegistryEvent}
+ * 并由 {@link com.navasmart.vda5050.listener.VehicleRegistryListener} 处理。</p>
  */
-@Component
 public class VehicleRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(VehicleRegistry.class);
 
-    /** 车辆上下文映射表，key 格式为 {@code "manufacturer:serialNumber"} */
+    /**
+     * 车辆上下文映射表，key 格式为 {@code "manufacturer:serialNumber"}
+     */
     private final ConcurrentHashMap<String, VehicleContext> vehicles = new ConcurrentHashMap<>();
     private final Vda5050Properties properties;
 
@@ -142,10 +143,12 @@ public class VehicleRegistry {
     public VehicleContext registerVehicle(String manufacturer, String serialNumber,
                                           boolean proxyMode, boolean serverMode) {
         VehicleContext ctx = getOrCreate(manufacturer, serialNumber);
-        if (proxyMode) {
+        // 注册 Proxy 模式车辆
+        if (properties.getProxy().isEnabled() && proxyMode) {
             ctx.setProxyMode(true);
         }
-        if (serverMode) {
+        // 注册 Server 模式车辆
+        if (properties.getServer().isEnabled() && serverMode) {
             ctx.setServerMode(true);
         }
         log.info("Dynamically registered vehicle: {} (proxy={}, server={})",

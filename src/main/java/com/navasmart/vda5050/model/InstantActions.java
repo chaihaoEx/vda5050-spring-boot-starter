@@ -33,8 +33,10 @@ public class InstantActions {
     /** AGV 唯一序列号。 */
     private String serialNumber;
 
-    /** 即时动作列表，AGV 收到后应立即开始执行这些动作。 */
-    private List<Action> instantActions = new ArrayList<>();
+    /**
+     * 即时动作列表（JSON 键名 {@code actions}，见 VDA5050 §7.4）。
+     */
+    private List<Action> actions = new ArrayList<>();
 
     public InstantActions() {}
 
@@ -53,8 +55,8 @@ public class InstantActions {
     public String getSerialNumber() { return serialNumber; }
     public void setSerialNumber(String serialNumber) { this.serialNumber = serialNumber; }
 
-    public List<Action> getInstantActions() { return instantActions; }
-    public void setInstantActions(List<Action> instantActions) {
-        this.instantActions = instantActions != null ? new ArrayList<>(instantActions) : new ArrayList<>();
+    public List<Action> getActions() { return actions; }
+    public void setActions(List<Action> actions) {
+        this.actions = actions != null ? new ArrayList<>(actions) : new ArrayList<>();
     }
 }

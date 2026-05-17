@@ -52,55 +52,50 @@ public class VehicleContext {
 
 ## 2. VehicleRegistry
 
+由 `Vda5050AutoConfiguration` 注册为 Bean（非 `@Component` 扫描）。启动时 `@PostConstruct init()` 根据 `vda5050.proxy` / `vda5050.server` 的车辆列表与 `enabled` 标志填充注册表；每条记录的模式解析使用 **`Vda5050Properties#isProxyVehicle`** / **`isServerVehicle`**（与运行时监听逻辑一致）。
+
+运行时若要同步 MQTT（连接 Proxy 客户端、订阅 Server Topic），应用层需 **`ApplicationEventPublisher.publishEvent(new VehicleRegistryEvent(...))`**；由 **`VehicleRegistryListener`**（自动配置注册的 Bean）监听事件并编排 **`VehicleRegistry`** 与 **`MqttConnectionManager`**。事件载荷仅包含变更类型、`manufacturer`、`serialNumber`，**不包含** proxy/server 布尔值——后者始终来自当前配置。
+
 ```java
-@Component
 public class VehicleRegistry {
 
     private final ConcurrentHashMap<String, VehicleContext> vehicles = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void init() {
-        // 注册 Proxy 模式车辆
-        if (properties.getProxy() != null && properties.getProxy().isEnabled()) {
+        if (properties.getProxy().isEnabled()) {
             for (VehicleConfig vc : properties.getProxy().getVehicles()) {
-                VehicleContext ctx = getOrCreate(vc.getManufacturer(), vc.getSerialNumber());
-                ctx.setProxyMode(true);
+                applyModesFromProperties(vc.getManufacturer(), vc.getSerialNumber());
             }
         }
-        // 注册 Server 模式车辆
-        if (properties.getServer() != null && properties.getServer().isEnabled()) {
+        if (properties.getServer().isEnabled()) {
             for (VehicleConfig vc : properties.getServer().getVehicles()) {
-                VehicleContext ctx = getOrCreate(vc.getManufacturer(), vc.getSerialNumber());
-                ctx.setServerMode(true);
+                applyModesFromProperties(vc.getManufacturer(), vc.getSerialNumber());
             }
         }
     }
 
-    public VehicleContext getOrCreate(String manufacturer, String serialNumber) {
-        String key = manufacturer + ":" + serialNumber;
-        return vehicles.computeIfAbsent(key, k -> new VehicleContext(manufacturer, serialNumber));
-    }
+    /** 按当前配置刷新该车的 Proxy/Server 标志 */
+    public VehicleContext applyModesFromProperties(String manufacturer, String serialNumber) { ... }
 
-    public VehicleContext get(String vehicleId) { return vehicles.get(vehicleId); }
-    public VehicleContext get(String mfr, String sn) { return vehicles.get(mfr + ":" + sn); }
+    /** 移除条目（注销事件路径） */
+    public VehicleContext remove(String manufacturer, String serialNumber) { ... }
 
-    /** 获取所有 Proxy 模式车辆 */
-    public Collection<VehicleContext> getProxyVehicles() {
-        return vehicles.values().stream().filter(VehicleContext::isProxyMode)
-            .collect(Collectors.toList());
-    }
+    public VehicleContext getOrCreate(String manufacturer, String serialNumber) { ... }
+    public VehicleContext get(String vehicleId) { ... }
+    public VehicleContext get(String mfr, String sn) { ... }
 
-    /** 获取所有 Server 模式车辆 */
-    public Collection<VehicleContext> getServerVehicles() {
-        return vehicles.values().stream().filter(VehicleContext::isServerMode)
-            .collect(Collectors.toList());
-    }
-
-    public Collection<VehicleContext> getAll() {
-        return Collections.unmodifiableCollection(vehicles.values());
-    }
+    public Collection<VehicleContext> getProxyVehicles() { ... }
+    public Collection<VehicleContext> getServerVehicles() { ... }
+    public Collection<VehicleContext> getAll() { ... }
 }
 ```
+
+### 2.1 VehicleRegistryEvent（运行时）
+
+- **`VehicleRegistryChangeType`**：`REGISTERED`、`UNREGISTERED`。
+- **载荷**：`manufacturer`、`serialNumber`（及 Spring `ApplicationEvent` 的 `source`）。
+- **约定**：默认同步监听；调用 `publishEvent` 的线程上会执行 MQTT I/O（失败会向外传播，具体异常类型以实现为准）。
 
 ---
 

@@ -3,6 +3,8 @@ package com.navasmart.vda5050.proxy;
 import com.navasmart.vda5050.autoconfigure.Vda5050Properties;
 import com.navasmart.vda5050.error.ErrorAggregator;
 import com.navasmart.vda5050.error.Vda5050ErrorFactory;
+import com.navasmart.vda5050.event.vda5050.OrderCompletedEvent;
+import com.navasmart.vda5050.event.vda5050.OrderFailedEvent;
 import com.navasmart.vda5050.model.Action;
 import com.navasmart.vda5050.model.ActionState;
 import com.navasmart.vda5050.model.AgvState;
@@ -164,7 +166,7 @@ class Phase4DecomposeTest {
             ctx.unlock();
         }
 
-        verify(eventPublisher).publishEvent(any(com.navasmart.vda5050.event.OrderCompletedEvent.class));
+        verify(eventPublisher).publishEvent(any(OrderCompletedEvent.class));
     }
 
     // ============ Decomposed executor: navigation through execute() ============
@@ -240,7 +242,7 @@ class Phase4DecomposeTest {
             ctx.unlock();
         }
 
-        verify(eventPublisher).publishEvent(any(com.navasmart.vda5050.event.OrderFailedEvent.class));
+        verify(eventPublisher).publishEvent(any(OrderFailedEvent.class));
     }
 
     // ============ VehicleContext: server lock independence ============

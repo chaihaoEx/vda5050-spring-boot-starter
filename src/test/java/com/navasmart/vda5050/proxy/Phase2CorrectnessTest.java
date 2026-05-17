@@ -82,8 +82,8 @@ class Phase2CorrectnessTest {
         adapter = new Vda5050ProxyVehicleAdapter() {
             @Override
             public CompletableFuture<NavigationResult> onNavigate(String vehicleId,
-                    com.navasmart.vda5050.model.Node targetNode,
-                    List<com.navasmart.vda5050.model.Node> waypoints,
+                    Node targetNode,
+                    List<Node> waypoints,
                     List<com.navasmart.vda5050.model.Edge> edges) {
                 return CompletableFuture.completedFuture(NavigationResult.success());
             }
@@ -107,7 +107,7 @@ class Phase2CorrectnessTest {
 
             @Override
             public CompletableFuture<ActionResult> onActionExecute(String vehicleId,
-                    com.navasmart.vda5050.model.Action action) {
+                    Action action) {
                 actionFuture = new CompletableFuture<>();
                 return actionFuture;
             }

@@ -90,13 +90,13 @@ class ModelDefensiveCopyTest {
     }
 
     @Test
-    void instantActions_setInstantActions_defensiveCopy() {
+    void instantActions_setActions_defensiveCopy() {
         List<Action> original = new ArrayList<>();
         original.add(new Action());
         InstantActions ia = new InstantActions();
-        ia.setInstantActions(original);
+        ia.setActions(original);
         original.add(new Action());
-        assertThat(ia.getInstantActions()).hasSize(1);
+        assertThat(ia.getActions()).hasSize(1);
     }
 
     @Test

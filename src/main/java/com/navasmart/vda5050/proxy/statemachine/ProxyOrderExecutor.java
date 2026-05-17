@@ -13,8 +13,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import com.navasmart.vda5050.event.OrderCompletedEvent;
-import com.navasmart.vda5050.event.OrderFailedEvent;
+import com.navasmart.vda5050.event.vda5050.OrderCompletedEvent;
+import com.navasmart.vda5050.event.vda5050.OrderFailedEvent;
 
 import java.util.ArrayList;
 import java.util.Collections;

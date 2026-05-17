@@ -223,7 +223,7 @@ class ProxyOrderFlowTest {
         cancelAction.setActionId("cancel-" + UUID.randomUUID());
         cancelAction.setActionType("cancelOrder");
         cancelAction.setBlockingType(BlockingType.NONE.getValue());
-        instantActions.setInstantActions(Collections.singletonList(cancelAction));
+        instantActions.setActions(Collections.singletonList(cancelAction));
 
         byte[] iaPayload = objectMapper.writeValueAsBytes(instantActions);
         testClient.publish(TOPIC_PREFIX + "/instantActions", new MqttMessage(iaPayload));
@@ -252,7 +252,7 @@ class ProxyOrderFlowTest {
         pauseAction.setActionId("pause-" + UUID.randomUUID());
         pauseAction.setActionType("startPause");
         pauseAction.setBlockingType(BlockingType.NONE.getValue());
-        pauseActions.setInstantActions(Collections.singletonList(pauseAction));
+        pauseActions.setActions(Collections.singletonList(pauseAction));
 
         byte[] pausePayload = objectMapper.writeValueAsBytes(pauseActions);
         testClient.publish(TOPIC_PREFIX + "/instantActions", new MqttMessage(pausePayload));
@@ -272,7 +272,7 @@ class ProxyOrderFlowTest {
         resumeAction.setActionId("resume-" + UUID.randomUUID());
         resumeAction.setActionType("stopPause");
         resumeAction.setBlockingType(BlockingType.NONE.getValue());
-        resumeActions.setInstantActions(Collections.singletonList(resumeAction));
+        resumeActions.setActions(Collections.singletonList(resumeAction));
 
         byte[] resumePayload = objectMapper.writeValueAsBytes(resumeActions);
         testClient.publish(TOPIC_PREFIX + "/instantActions", new MqttMessage(resumePayload));

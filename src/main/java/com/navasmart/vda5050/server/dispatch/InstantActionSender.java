@@ -69,7 +69,7 @@ public class InstantActionSender {
         msg.setVersion(properties.getMqtt().getProtocolVersion());
         msg.setManufacturer(ctx.getManufacturer());
         msg.setSerialNumber(ctx.getSerialNumber());
-        msg.setInstantActions(actions);
+        msg.setActions(actions);
 
         boolean published = mqttGateway.publishInstantActions(ctx.getManufacturer(), ctx.getSerialNumber(), msg);
         if (!published) {

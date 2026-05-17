@@ -69,7 +69,7 @@ public class ProxyOrderStateMachine {
     }
 
     public synchronized void receiveInstantActions(InstantActions instantActions) {
-        for (Action action : instantActions.getInstantActions()) {
+        for (Action action : instantActions.getActions()) {
             processInstantAction(action);
         }
     }
